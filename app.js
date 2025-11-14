@@ -92,13 +92,10 @@ class StarlitTimelineApp {
         document.addEventListener('mousemove', (e) => this.handleTimelineMouseMove(e));
         document.addEventListener('mouseup', (e) => this.handleTimelineMouseUp(e));
         
-        // タイムラインのドラッグ&ドロップ
+        // タイムラインスクロールエリアのドラッグ&ドロップ（素材追加用）
         const timelineScroll = document.getElementById('timelineScroll');
         timelineScroll.addEventListener('drop', (e) => this.handleAssetDrop(e));
         timelineScroll.addEventListener('dragover', (e) => e.preventDefault());
-        
-        this.timelineCanvas.addEventListener('drop', (e) => this.handleAssetDrop(e));
-        this.timelineCanvas.addEventListener('dragover', (e) => e.preventDefault());
         
         // キーボードショートカット
         document.addEventListener('keydown', (e) => this.handleKeyDown(e));
