@@ -832,51 +832,59 @@ class StarlitTimelineApp {
             </div>
             
             <!-- トランジション設定 -->
-            <div class="property-section-header">🎬 トランジション</div>
-            
-            <div class="property-group">
-                <div class="property-label">イン</div>
-                <select class="property-input" onchange="app.updateTransition('in', 'type', this.value)">
-                    ${this.availableTransitions.map(t => 
-                        `<option value="${t.id}" ${clip.transitionIn.type === t.id ? 'selected' : ''}>${t.name}</option>`
-                    ).join('')}
-                </select>
+            <div class="property-section-header" onclick="app.togglePropertySection('transition')">
+                <span class="section-toggle-icon" id="transitionToggle">▼</span>
+                🎬 トランジション
             </div>
-            
-            <div class="property-group">
-                <div class="property-label">イン時間: <span id="transInDurationValue">${clip.transitionIn.duration.toFixed(2)}秒</span></div>
-                <input type="range" class="property-slider" value="${clip.transitionIn.duration.toFixed(2)}" 
-                    min="0.1" max="${clip.duration / 2}" step="0.1"
-                    oninput="app.updateTransition('in', 'duration', parseFloat(this.value)); document.getElementById('transInDurationValue').textContent = this.value + '秒'">
-            </div>
-            
-            <div class="property-group">
-                <div class="property-label">アウト</div>
-                <select class="property-input" onchange="app.updateTransition('out', 'type', this.value)">
-                    ${this.availableTransitions.map(t => 
-                        `<option value="${t.id}" ${clip.transitionOut.type === t.id ? 'selected' : ''}>${t.name}</option>`
-                    ).join('')}
-                </select>
-            </div>
-            
-            <div class="property-group">
-                <div class="property-label">アウト時間: <span id="transOutDurationValue">${clip.transitionOut.duration.toFixed(2)}秒</span></div>
-                <input type="range" class="property-slider" value="${clip.transitionOut.duration.toFixed(2)}" 
-                    min="0.1" max="${clip.duration / 2}" step="0.1"
-                    oninput="app.updateTransition('out', 'duration', parseFloat(this.value)); document.getElementById('transOutDurationValue').textContent = this.value + '秒'">
+            <div class="property-section-content" id="transitionContent">
+                <div class="property-group">
+                    <div class="property-label">イン</div>
+                    <select class="property-input" onchange="app.updateTransition('in', 'type', this.value)">
+                        ${this.availableTransitions.map(t => 
+                            `<option value="${t.id}" ${clip.transitionIn.type === t.id ? 'selected' : ''}>${t.name}</option>`
+                        ).join('')}
+                    </select>
+                </div>
+                
+                <div class="property-group">
+                    <div class="property-label">イン時間: <span id="transInDurationValue">${clip.transitionIn.duration.toFixed(2)}秒</span></div>
+                    <input type="range" class="property-slider" value="${clip.transitionIn.duration.toFixed(2)}" 
+                        min="0.1" max="${clip.duration / 2}" step="0.1"
+                        oninput="app.updateTransition('in', 'duration', parseFloat(this.value)); document.getElementById('transInDurationValue').textContent = this.value + '秒'">
+                </div>
+                
+                <div class="property-group">
+                    <div class="property-label">アウト</div>
+                    <select class="property-input" onchange="app.updateTransition('out', 'type', this.value)">
+                        ${this.availableTransitions.map(t => 
+                            `<option value="${t.id}" ${clip.transitionOut.type === t.id ? 'selected' : ''}>${t.name}</option>`
+                        ).join('')}
+                    </select>
+                </div>
+                
+                <div class="property-group">
+                    <div class="property-label">アウト時間: <span id="transOutDurationValue">${clip.transitionOut.duration.toFixed(2)}秒</span></div>
+                    <input type="range" class="property-slider" value="${clip.transitionOut.duration.toFixed(2)}" 
+                        min="0.1" max="${clip.duration / 2}" step="0.1"
+                        oninput="app.updateTransition('out', 'duration', parseFloat(this.value)); document.getElementById('transOutDurationValue').textContent = this.value + '秒'">
+                </div>
             </div>
         `;
         
         // 音声クリップの場合はボリューム設定
         if (clip.asset.type === 'audio' || clip.asset.type === 'video') {
             propertiesHTML += `
-                <div class="property-section-header">🔊 音声</div>
-                
-                <div class="property-group">
-                    <div class="property-label">音量: <span id="volumeValue">${(clip.volume * 100).toFixed(0)}%</span></div>
-                    <input type="range" class="property-slider" value="${(clip.volume * 100).toFixed(0)}" 
-                        min="0" max="100" step="1"
-                        oninput="app.updateClipProperty('volume', parseFloat(this.value) / 100); document.getElementById('volumeValue').textContent = this.value + '%'">
+                <div class="property-section-header" onclick="app.togglePropertySection('audio')">
+                    <span class="section-toggle-icon" id="audioToggle">▼</span>
+                    🔊 音声
+                </div>
+                <div class="property-section-content" id="audioContent">
+                    <div class="property-group">
+                        <div class="property-label">音量: <span id="volumeValue">${(clip.volume * 100).toFixed(0)}%</span></div>
+                        <input type="range" class="property-slider" value="${(clip.volume * 100).toFixed(0)}" 
+                            min="0" max="100" step="1"
+                            oninput="app.updateClipProperty('volume', parseFloat(this.value) / 100); document.getElementById('volumeValue').textContent = this.value + '%'">
+                    </div>
                 </div>
             `;
         }
@@ -884,15 +892,18 @@ class StarlitTimelineApp {
         // 動画・連番アニメーションの場合はループ設定
         if (clip.asset.type === 'video' || clip.asset.type === 'sequence') {
             propertiesHTML += `
-                <div class="property-section-header">🔁 ループ</div>
-                
-                <div class="property-group">
-                    <div class="property-label">ループ回数: <span id="loopCountValue">${clip.loopCount}</span></div>
-                    <input type="range" class="property-slider" value="${clip.loopCount}" 
-                        min="1" max="10" step="1"
-                        oninput="document.getElementById('loopCountValue').textContent = this.value"
-                        onchange="app.updateClipProperty('loopCount', parseInt(this.value))">
+                <div class="property-section-header" onclick="app.togglePropertySection('loop')">
+                    <span class="section-toggle-icon" id="loopToggle">▼</span>
+                    🔁 ループ
                 </div>
+                <div class="property-section-content" id="loopContent">
+                    <div class="property-group">
+                        <div class="property-label">ループ回数: <span id="loopCountValue">${clip.loopCount}</span></div>
+                        <input type="range" class="property-slider" value="${clip.loopCount}" 
+                            min="1" max="10" step="1"
+                            oninput="document.getElementById('loopCountValue').textContent = this.value"
+                            onchange="app.updateClipProperty('loopCount', parseInt(this.value))">
+                    </div>
             `;
             
             // 連番の場合はフレームレート設定
@@ -907,6 +918,8 @@ class StarlitTimelineApp {
                     </div>
                 `;
             }
+            
+            propertiesHTML += `</div>`;
         }
         
         // 映像クリップの場合はトランスフォーム設定
@@ -918,73 +931,77 @@ class StarlitTimelineApp {
             const currentScale = this.getKeyframeValue(clip, 'scale', localTime);
             
             propertiesHTML += `
-                <div class="property-section-header">📐 トランスフォーム</div>
-                
-                <div class="property-group">
-                    <div class="property-label">X位置: <span id="xValue">${currentX.toFixed(0)}px</span></div>
-                    <input type="range" class="property-slider" value="${currentX.toFixed(0)}"
-                        min="-960" max="960" step="1"
-                        oninput="document.getElementById('xValue').textContent = this.value + 'px'; app.setKeyframeValueLive('x', parseFloat(this.value))"
-                        onchange="app.setKeyframeValue('x', parseFloat(this.value))">
-                    <div class="keyframe-controls">
-                        <button class="keyframe-button ${this.hasKeyframeAt(clip, 'x', localTime) ? 'active' : ''}" 
-                            onclick="app.toggleKeyframe('x')">💎 キーフレーム</button>
-                    </div>
+                <div class="property-section-header" onclick="app.togglePropertySection('transform')">
+                    <span class="section-toggle-icon" id="transformToggle">▼</span>
+                    📐 トランスフォーム
                 </div>
-                
-                <div class="property-group">
-                    <div class="property-label">Y位置: <span id="yValue">${currentY.toFixed(0)}px</span></div>
-                    <input type="range" class="property-slider" value="${currentY.toFixed(0)}"
-                        min="-540" max="540" step="1"
-                        oninput="document.getElementById('yValue').textContent = this.value + 'px'; app.setKeyframeValueLive('y', parseFloat(this.value))"
-                        onchange="app.setKeyframeValue('y', parseFloat(this.value))">
-                    <div class="keyframe-controls">
-                        <button class="keyframe-button ${this.hasKeyframeAt(clip, 'y', localTime) ? 'active' : ''}" 
-                            onclick="app.toggleKeyframe('y')">💎 キーフレーム</button>
+                <div class="property-section-content" id="transformContent">
+                    <div class="property-group">
+                        <div class="property-label">X位置: <span id="xValue">${currentX.toFixed(0)}px</span></div>
+                        <input type="range" class="property-slider" value="${currentX.toFixed(0)}"
+                            min="-960" max="960" step="1"
+                            oninput="document.getElementById('xValue').textContent = this.value + 'px'; app.setKeyframeValueLive('x', parseFloat(this.value))"
+                            onchange="app.setKeyframeValue('x', parseFloat(this.value))">
+                        <div class="keyframe-controls">
+                            <button class="keyframe-button ${this.hasKeyframeAt(clip, 'x', localTime) ? 'active' : ''}" 
+                                onclick="app.toggleKeyframe('x')">💎 キーフレーム</button>
+                        </div>
                     </div>
-                </div>
-                
-                <div class="property-group">
-                    <div class="property-label">回転: <span id="rotationValue">${currentRotation.toFixed(0)}°</span></div>
-                    <input type="range" class="property-slider" value="${currentRotation.toFixed(0)}"
-                        min="-180" max="180" step="1"
-                        oninput="document.getElementById('rotationValue').textContent = this.value + '°'; app.setKeyframeValueLive('rotation', parseFloat(this.value))"
-                        onchange="app.setKeyframeValue('rotation', parseFloat(this.value))">
-                    <div class="keyframe-controls">
-                        <button class="keyframe-button ${this.hasKeyframeAt(clip, 'rotation', localTime) ? 'active' : ''}" 
-                            onclick="app.toggleKeyframe('rotation')">💎 キーフレーム</button>
+                    
+                    <div class="property-group">
+                        <div class="property-label">Y位置: <span id="yValue">${currentY.toFixed(0)}px</span></div>
+                        <input type="range" class="property-slider" value="${currentY.toFixed(0)}"
+                            min="-540" max="540" step="1"
+                            oninput="document.getElementById('yValue').textContent = this.value + 'px'; app.setKeyframeValueLive('y', parseFloat(this.value))"
+                            onchange="app.setKeyframeValue('y', parseFloat(this.value))">
+                        <div class="keyframe-controls">
+                            <button class="keyframe-button ${this.hasKeyframeAt(clip, 'y', localTime) ? 'active' : ''}" 
+                                onclick="app.toggleKeyframe('y')">💎 キーフレーム</button>
+                        </div>
                     </div>
-                </div>
-                
-                <div class="property-group">
-                    <div class="property-label">不透明度: <span id="opacityValue">${(currentOpacity * 100).toFixed(0)}%</span></div>
-                    <input type="range" class="property-slider" value="${(currentOpacity * 100).toFixed(0)}" 
-                        min="0" max="100" step="1"
-                        oninput="document.getElementById('opacityValue').textContent = this.value + '%'; app.setKeyframeValueLive('opacity', parseFloat(this.value) / 100)"
-                        onchange="app.setKeyframeValue('opacity', parseFloat(this.value) / 100)">
-                    <div class="keyframe-controls">
-                        <button class="keyframe-button ${this.hasKeyframeAt(clip, 'opacity', localTime) ? 'active' : ''}" 
-                            onclick="app.toggleKeyframe('opacity')">💎 キーフレーム</button>
+                    
+                    <div class="property-group">
+                        <div class="property-label">回転: <span id="rotationValue">${currentRotation.toFixed(0)}°</span></div>
+                        <input type="range" class="property-slider" value="${currentRotation.toFixed(0)}"
+                            min="-180" max="180" step="1"
+                            oninput="document.getElementById('rotationValue').textContent = this.value + '°'; app.setKeyframeValueLive('rotation', parseFloat(this.value))"
+                            onchange="app.setKeyframeValue('rotation', parseFloat(this.value))">
+                        <div class="keyframe-controls">
+                            <button class="keyframe-button ${this.hasKeyframeAt(clip, 'rotation', localTime) ? 'active' : ''}" 
+                                onclick="app.toggleKeyframe('rotation')">💎 キーフレーム</button>
+                        </div>
                     </div>
-                </div>
-                
-                <div class="property-group">
-                    <div class="property-label">スケール: <span id="scaleValue">${(currentScale * 100).toFixed(0)}%</span></div>
-                    <input type="range" class="property-slider" value="${(currentScale * 100).toFixed(0)}" 
-                        min="10" max="300" step="1"
-                        oninput="document.getElementById('scaleValue').textContent = this.value + '%'; app.setKeyframeValueLive('scale', parseFloat(this.value) / 100)"
-                        onchange="app.setKeyframeValue('scale', parseFloat(this.value) / 100)">
-                    <div class="keyframe-controls">
-                        <button class="keyframe-button ${this.hasKeyframeAt(clip, 'scale', localTime) ? 'active' : ''}" 
-                            onclick="app.toggleKeyframe('scale')">💎 キーフレーム</button>
+                    
+                    <div class="property-group">
+                        <div class="property-label">不透明度: <span id="opacityValue">${(currentOpacity * 100).toFixed(0)}%</span></div>
+                        <input type="range" class="property-slider" value="${(currentOpacity * 100).toFixed(0)}" 
+                            min="0" max="100" step="1"
+                            oninput="document.getElementById('opacityValue').textContent = this.value + '%'; app.setKeyframeValueLive('opacity', parseFloat(this.value) / 100)"
+                            onchange="app.setKeyframeValue('opacity', parseFloat(this.value) / 100)">
+                        <div class="keyframe-controls">
+                            <button class="keyframe-button ${this.hasKeyframeAt(clip, 'opacity', localTime) ? 'active' : ''}" 
+                                onclick="app.toggleKeyframe('opacity')">💎 キーフレーム</button>
+                        </div>
                     </div>
-                </div>
-                
-                <div class="property-group">
-                    <div class="property-label">
-                        <input type="checkbox" id="useOriginalSize" ${clip.useOriginalSize ? 'checked' : ''} 
-                            onchange="app.updateClipProperty('useOriginalSize', this.checked)">
-                        原寸表示
+                    
+                    <div class="property-group">
+                        <div class="property-label">スケール: <span id="scaleValue">${(currentScale * 100).toFixed(0)}%</span></div>
+                        <input type="range" class="property-slider" value="${(currentScale * 100).toFixed(0)}" 
+                            min="10" max="300" step="1"
+                            oninput="document.getElementById('scaleValue').textContent = this.value + '%'; app.setKeyframeValueLive('scale', parseFloat(this.value) / 100)"
+                            onchange="app.setKeyframeValue('scale', parseFloat(this.value) / 100)">
+                        <div class="keyframe-controls">
+                            <button class="keyframe-button ${this.hasKeyframeAt(clip, 'scale', localTime) ? 'active' : ''}" 
+                                onclick="app.toggleKeyframe('scale')">💎 キーフレーム</button>
+                        </div>
+                    </div>
+                    
+                    <div class="property-group">
+                        <div class="property-label">
+                            <input type="checkbox" id="useOriginalSize" ${clip.useOriginalSize ? 'checked' : ''} 
+                                onchange="app.updateClipProperty('useOriginalSize', this.checked)">
+                            原寸表示
+                        </div>
                     </div>
                 </div>
             `;
@@ -1608,6 +1625,16 @@ class StarlitTimelineApp {
             this.drawTimeline();
             this.updatePreview();
             this.saveHistory();
+        }
+    }
+    
+    togglePropertySection(sectionName) {
+        const content = document.getElementById(`${sectionName}Content`);
+        const toggle = document.getElementById(`${sectionName}Toggle`);
+        
+        if (content && toggle) {
+            content.classList.toggle('collapsed');
+            toggle.classList.toggle('collapsed');
         }
     }
     
