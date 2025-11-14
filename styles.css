@@ -789,6 +789,18 @@ body {
     border: 1px solid var(--chocolate-dark);
 }
 
+.effect-settings-info {
+    background: rgba(139, 69, 19, 0.2);
+    padding: 8px 12px;
+    margin: 0 10px 10px 10px;
+    border-radius: 6px;
+    border: 1px dashed var(--accent-orange);
+    font-size: 11px;
+    color: var(--biscuit-main);
+    text-align: center;
+    line-height: 1.4;
+}
+
 .effect-section-title {
     font-size: 12px;
     font-weight: bold;
@@ -948,4 +960,42 @@ input[type="checkbox"] {
     color: var(--biscuit-light);
     min-width: 40px;
     display: inline-block;
+}
+
+/* ========================================
+   通知スタイル
+   ======================================== */
+.notification {
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    background: linear-gradient(135deg, var(--cocoa-color) 0%, var(--chocolate-main) 100%);
+    color: var(--biscuit-light);
+    padding: 15px 25px;
+    border-radius: 12px;
+    border: 2px solid var(--accent-orange);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    font-size: 14px;
+    font-weight: bold;
+    z-index: 10000;
+    opacity: 0;
+    transform: translateX(400px);
+    transition: all 0.3s ease;
+}
+
+.notification.show {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.notification::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, rgba(255, 215, 0, 0.1) 0%, transparent 100%);
+    border-radius: 10px;
+    pointer-events: none;
 }

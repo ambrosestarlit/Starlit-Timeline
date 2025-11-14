@@ -166,6 +166,13 @@
                 <div class="effects-panel">
                     <div class="sidebar-header">
                         <h3>✨ エフェクト</h3>
+                        <div class="header-controls">
+                            <button class="round-button small" onclick="app.saveEffectSettings()" title="エフェクト設定を保存">💾</button>
+                            <button class="round-button small" onclick="app.loadEffectSettings()" title="エフェクト設定を読込">📂</button>
+                        </div>
+                    </div>
+                    <div class="effect-settings-info">
+                        💡 エフェクト設定は 💾 ボタンで保存できます
                     </div>
                     <div class="effects-content">
                         <div class="effect-item">
@@ -236,6 +243,7 @@
     <!-- 非表示のファイル入力 -->
     <input type="file" id="fileInput" multiple accept="image/*,video/*,audio/*" style="display: none;" onchange="app.handleFileSelect(event)">
     <input type="file" id="projectInput" accept=".json" style="display: none;" onchange="app.handleProjectLoad(event)">
+    <input type="file" id="effectSettingsInput" accept=".json" style="display: none;" onchange="app.handleEffectSettingsLoad(event)">
 
     <script src="app.js"></script>
 </body>

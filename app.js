@@ -1939,6 +1939,123 @@ class StarlitTimelineApp {
         }
     }
     
+    // エフェクト設定の保存・読込
+    saveEffectSettings() {
+        const settings = {
+            version: '1.0',
+            type: 'effect_settings',
+            timestamp: new Date().toISOString(),
+            effects: this.effects
+        };
+        
+        const blob = new Blob([JSON.stringify(settings, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        
+        // タイムスタンプ付きファイル名
+        const date = new Date();
+        const dateStr = date.toISOString().slice(0, 19).replace(/:/g, '-');
+        a.download = `starlit_effect_settings_${dateStr}.json`;
+        
+        a.click();
+        URL.revokeObjectURL(url);
+        
+        // 成功メッセージ
+        this.showNotification('💾 エフェクト設定を保存しました');
+    }
+    
+    loadEffectSettings() {
+        document.getElementById('effectSettingsInput').click();
+    }
+    
+    handleEffectSettingsLoad(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const settings = JSON.parse(e.target.result);
+                
+                // バージョンチェック
+                if (settings.type !== 'effect_settings') {
+                    throw new Error('エフェクト設定ファイルではありません');
+                }
+                
+                // エフェクト設定を復元
+                this.effects = settings.effects;
+                
+                // UIを更新
+                this.updateEffectUI();
+                this.updatePreview();
+                
+                // 成功メッセージ
+                this.showNotification('📂 エフェクト設定を読み込みました');
+                
+            } catch (err) {
+                alert('エフェクト設定の読み込みに失敗しました:\n' + err.message);
+            }
+        };
+        reader.readAsText(file);
+        
+        // ファイル入力をリセット（同じファイルを再度選択可能にする）
+        event.target.value = '';
+    }
+    
+    // エフェクトUIを設定に合わせて更新
+    updateEffectUI() {
+        // レターボックス
+        document.getElementById('letterboxEnable').checked = this.effects.letterbox.enabled;
+        document.getElementById('letterboxHeight').value = this.effects.letterbox.height;
+        document.getElementById('letterboxHeightValue').textContent = `${this.effects.letterbox.height}px`;
+        document.getElementById('letterboxColor').value = this.effects.letterbox.color;
+        
+        // グラデーション
+        document.getElementById('gradientEnable').checked = this.effects.gradient.enabled;
+        
+        // 上部
+        document.getElementById('gradientTopColor').value = this.effects.gradient.top.color;
+        document.getElementById('gradientTopHeight').value = this.effects.gradient.top.height;
+        document.getElementById('gradientTopHeightValue').textContent = `${this.effects.gradient.top.height}px`;
+        document.getElementById('gradientTopOpacity').value = this.effects.gradient.top.opacity;
+        document.getElementById('gradientTopOpacityValue').textContent = `${this.effects.gradient.top.opacity}%`;
+        
+        // 下部
+        document.getElementById('gradientBottomColor').value = this.effects.gradient.bottom.color;
+        document.getElementById('gradientBottomHeight').value = this.effects.gradient.bottom.height;
+        document.getElementById('gradientBottomHeightValue').textContent = `${this.effects.gradient.bottom.height}px`;
+        document.getElementById('gradientBottomOpacity').value = this.effects.gradient.bottom.opacity;
+        document.getElementById('gradientBottomOpacityValue').textContent = `${this.effects.gradient.bottom.opacity}%`;
+        
+        // ブレンドモード
+        document.getElementById('gradientBlendMode').value = this.effects.gradient.blendMode;
+    }
+    
+    // 通知表示
+    showNotification(message) {
+        // 既存の通知があれば削除
+        const existing = document.querySelector('.notification');
+        if (existing) {
+            existing.remove();
+        }
+        
+        // 通知要素を作成
+        const notification = document.createElement('div');
+        notification.className = 'notification';
+        notification.textContent = message;
+        document.body.appendChild(notification);
+        
+        // フェードイン
+        setTimeout(() => notification.classList.add('show'), 10);
+        
+        // 3秒後にフェードアウト
+        setTimeout(() => {
+            notification.classList.remove('show');
+            setTimeout(() => notification.remove(), 300);
+        }, 3000);
+    }
+    
     // 書き出し機能
     async exportVideo() {
         alert('MP4書き出し機能は開発中です。現在はブラウザの制限により、連番PNG書き出しをご利用ください。');
