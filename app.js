@@ -61,6 +61,21 @@ class StarlitTimelineApp {
         // 素材フィルター
         this.assetFilter = 'all'; // all, image, video, audio
         
+        // プロパティセクションの開閉状態を保持
+        this.propertySectionStates = {
+            transform: false,
+            transition: false,
+            audio: false
+        };
+        
+        // AEプロパティの開閉状態を保持
+        this.aePropertyStates = {
+            position: false,
+            scale: false,
+            rotation: false,
+            opacity: false
+        };
+        
         this.init();
     }
     
@@ -1006,6 +1021,40 @@ class StarlitTimelineApp {
         }
         
         panel.innerHTML = propertiesHTML;
+        
+        // 保存された開閉状態を復元
+        Object.keys(this.propertySectionStates).forEach(sectionName => {
+            const content = document.getElementById(`${sectionName}Content`);
+            const toggle = document.getElementById(`${sectionName}Toggle`);
+            
+            if (content && toggle) {
+                const isOpen = this.propertySectionStates[sectionName];
+                if (isOpen) {
+                    content.classList.remove('collapsed');
+                    toggle.classList.remove('collapsed');
+                } else {
+                    content.classList.add('collapsed');
+                    toggle.classList.add('collapsed');
+                }
+            }
+        });
+        
+        // AEプロパティの開閉状態を復元
+        Object.keys(this.aePropertyStates).forEach(propertyName => {
+            const content = document.getElementById(`${propertyName}Content`);
+            const icon = document.getElementById(`${propertyName}Icon`);
+            
+            if (content && icon) {
+                const isOpen = this.aePropertyStates[propertyName];
+                if (isOpen) {
+                    content.classList.remove('collapsed');
+                    icon.classList.add('expanded');
+                } else {
+                    content.classList.add('collapsed');
+                    icon.classList.remove('expanded');
+                }
+            }
+        });
     }
     
     // トランジション更新
@@ -1643,6 +1692,9 @@ class StarlitTimelineApp {
         if (content && toggle) {
             content.classList.toggle('collapsed');
             toggle.classList.toggle('collapsed');
+            
+            // 状態を保存
+            this.propertySectionStates[sectionName] = !content.classList.contains('collapsed');
         }
     }
     
@@ -1653,6 +1705,9 @@ class StarlitTimelineApp {
         if (content && icon) {
             content.classList.toggle('collapsed');
             icon.classList.toggle('expanded');
+            
+            // 状態を保存
+            this.aePropertyStates[propertyName] = !content.classList.contains('collapsed');
         }
     }
     
