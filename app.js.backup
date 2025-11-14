@@ -92,9 +92,6 @@ class StarlitTimelineApp {
         document.addEventListener('mousemove', (e) => this.handleTimelineMouseMove(e));
         document.addEventListener('mouseup', (e) => this.handleTimelineMouseUp(e));
         
-        // 定規のクリック/ドラッグイベント
-        this.rulerCanvas.addEventListener('mousedown', (e) => this.handleRulerMouseDown(e));
-        
         // タイムラインスクロールエリアのドラッグ&ドロップ（素材追加用）
         const timelineScroll = document.getElementById('timelineScroll');
         timelineScroll.addEventListener('drop', (e) => this.handleAssetDrop(e));
@@ -712,33 +709,7 @@ class StarlitTimelineApp {
         this.drawTimeline();
     }
     
-    // 定規のマウスダウン - シークバードラッグ
-    handleRulerMouseDown(e) {
-        this.isSeekbarDragging = true;
-        this.updateSeekbar(e);
-    }
-    
-    // シークバーの更新
-    updateSeekbar(e) {
-        const rect = this.rulerCanvas.getBoundingClientRect();
-        const scrollContainer = document.getElementById('timelineScroll');
-        const x = e.clientX - rect.left + scrollContainer.scrollLeft;
-        
-        this.currentTime = Math.max(0, x / this.zoom);
-        this.updateTimeDisplay();
-        this.updatePreview();
-        this.drawTimeline();
-        this.updatePropertiesPanel();
-    }
-    
     handleTimelineMouseMove(e) {
-        // シークバードラッグ中
-        if (this.isSeekbarDragging) {
-            this.updateSeekbar(e);
-            return;
-        }
-        
-        // クリップドラッグ中
         if (!this.isDragging || !this.selectedClip) return;
         
         console.log('=== mousemove (dragging) ===');
@@ -780,7 +751,6 @@ class StarlitTimelineApp {
         }
         this.isDragging = false;
         this.isMovingClip = false; // フラグをリセット
-        this.isSeekbarDragging = false; // シークバーフラグもリセット
         console.log('ドラッグ終了');
     }
     
@@ -890,8 +860,7 @@ class StarlitTimelineApp {
                     <div class="property-label">ループ回数: <span id="loopCountValue">${clip.loopCount}</span></div>
                     <input type="range" class="property-slider" value="${clip.loopCount}" 
                         min="1" max="10" step="1"
-                        oninput="document.getElementById('loopCountValue').textContent = this.value"
-                        onchange="app.updateClipProperty('loopCount', parseInt(this.value))">
+                        oninput="app.updateClipProperty('loopCount', parseInt(this.value)); document.getElementById('loopCountValue').textContent = this.value">
                 </div>
             `;
             
@@ -902,8 +871,7 @@ class StarlitTimelineApp {
                         <div class="property-label">フレームレート: <span id="frameRateValue">${clip.frameRate || 30} fps</span></div>
                         <input type="range" class="property-slider" value="${clip.frameRate || 30}" 
                             min="1" max="60" step="1"
-                            oninput="document.getElementById('frameRateValue').textContent = this.value + ' fps'"
-                            onchange="app.updateClipProperty('frameRate', parseInt(this.value))">
+                            oninput="app.updateClipProperty('frameRate', parseInt(this.value)); document.getElementById('frameRateValue').textContent = this.value + ' fps'">
                     </div>
                 `;
             }
@@ -924,8 +892,7 @@ class StarlitTimelineApp {
                     <div class="property-label">X位置: <span id="xValue">${currentX.toFixed(0)}px</span></div>
                     <input type="range" class="property-slider" value="${currentX.toFixed(0)}"
                         min="-960" max="960" step="1"
-                        oninput="document.getElementById('xValue').textContent = this.value + 'px'; app.setKeyframeValueLive('x', parseFloat(this.value))"
-                        onchange="app.setKeyframeValue('x', parseFloat(this.value))">
+                        oninput="app.setKeyframeValue('x', parseFloat(this.value)); document.getElementById('xValue').textContent = this.value + 'px'">
                     <div class="keyframe-controls">
                         <button class="keyframe-button ${this.hasKeyframeAt(clip, 'x', localTime) ? 'active' : ''}" 
                             onclick="app.toggleKeyframe('x')">💎 キーフレーム</button>
@@ -936,8 +903,7 @@ class StarlitTimelineApp {
                     <div class="property-label">Y位置: <span id="yValue">${currentY.toFixed(0)}px</span></div>
                     <input type="range" class="property-slider" value="${currentY.toFixed(0)}"
                         min="-540" max="540" step="1"
-                        oninput="document.getElementById('yValue').textContent = this.value + 'px'; app.setKeyframeValueLive('y', parseFloat(this.value))"
-                        onchange="app.setKeyframeValue('y', parseFloat(this.value))">
+                        oninput="app.setKeyframeValue('y', parseFloat(this.value)); document.getElementById('yValue').textContent = this.value + 'px'">
                     <div class="keyframe-controls">
                         <button class="keyframe-button ${this.hasKeyframeAt(clip, 'y', localTime) ? 'active' : ''}" 
                             onclick="app.toggleKeyframe('y')">💎 キーフレーム</button>
@@ -948,8 +914,7 @@ class StarlitTimelineApp {
                     <div class="property-label">回転: <span id="rotationValue">${currentRotation.toFixed(0)}°</span></div>
                     <input type="range" class="property-slider" value="${currentRotation.toFixed(0)}"
                         min="-180" max="180" step="1"
-                        oninput="document.getElementById('rotationValue').textContent = this.value + '°'; app.setKeyframeValueLive('rotation', parseFloat(this.value))"
-                        onchange="app.setKeyframeValue('rotation', parseFloat(this.value))">
+                        oninput="app.setKeyframeValue('rotation', parseFloat(this.value)); document.getElementById('rotationValue').textContent = this.value + '°'">
                     <div class="keyframe-controls">
                         <button class="keyframe-button ${this.hasKeyframeAt(clip, 'rotation', localTime) ? 'active' : ''}" 
                             onclick="app.toggleKeyframe('rotation')">💎 キーフレーム</button>
@@ -960,8 +925,7 @@ class StarlitTimelineApp {
                     <div class="property-label">不透明度: <span id="opacityValue">${(currentOpacity * 100).toFixed(0)}%</span></div>
                     <input type="range" class="property-slider" value="${(currentOpacity * 100).toFixed(0)}" 
                         min="0" max="100" step="1"
-                        oninput="document.getElementById('opacityValue').textContent = this.value + '%'; app.setKeyframeValueLive('opacity', parseFloat(this.value) / 100)"
-                        onchange="app.setKeyframeValue('opacity', parseFloat(this.value) / 100)">
+                        oninput="app.setKeyframeValue('opacity', parseFloat(this.value) / 100); document.getElementById('opacityValue').textContent = this.value + '%'">
                     <div class="keyframe-controls">
                         <button class="keyframe-button ${this.hasKeyframeAt(clip, 'opacity', localTime) ? 'active' : ''}" 
                             onclick="app.toggleKeyframe('opacity')">💎 キーフレーム</button>
@@ -972,8 +936,7 @@ class StarlitTimelineApp {
                     <div class="property-label">スケール: <span id="scaleValue">${(currentScale * 100).toFixed(0)}%</span></div>
                     <input type="range" class="property-slider" value="${(currentScale * 100).toFixed(0)}" 
                         min="10" max="300" step="1"
-                        oninput="document.getElementById('scaleValue').textContent = this.value + '%'; app.setKeyframeValueLive('scale', parseFloat(this.value) / 100)"
-                        onchange="app.setKeyframeValue('scale', parseFloat(this.value) / 100)">
+                        oninput="app.setKeyframeValue('scale', parseFloat(this.value) / 100); document.getElementById('scaleValue').textContent = this.value + '%'">
                     <div class="keyframe-controls">
                         <button class="keyframe-button ${this.hasKeyframeAt(clip, 'scale', localTime) ? 'active' : ''}" 
                             onclick="app.toggleKeyframe('scale')">💎 キーフレーム</button>
@@ -1068,29 +1031,10 @@ class StarlitTimelineApp {
             keyframes.sort((a, b) => a.time - b.time);
         }
         
-        this.updatePreview(); // リアルタイム更新
+        this.updatePreview();
         this.drawTimeline();
         this.updatePropertiesPanel();
         this.saveHistory();
-    }
-    
-    // ライブ更新用（履歴保存なし、プレビューのみ更新）
-    setKeyframeValueLive(property, value) {
-        if (!this.selectedClip) return;
-        
-        const localTime = this.currentTime - this.selectedClip.startTime;
-        const keyframes = this.selectedClip.keyframes[property];
-        
-        // 既存のキーフレームを更新または追加
-        const existing = keyframes.find(kf => Math.abs(kf.time - localTime) < 0.05);
-        if (existing) {
-            existing.value = value;
-        } else {
-            keyframes.push({ time: localTime, value: value });
-            keyframes.sort((a, b) => a.time - b.time);
-        }
-        
-        this.updatePreview(); // プレビューのみ更新
     }
     
     toggleKeyframe(property) {
