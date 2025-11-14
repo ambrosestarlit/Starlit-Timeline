@@ -1278,8 +1278,8 @@ class StarlitTimelineApp {
         // トランジション効果を適用
         this.applyTransition(clip, localTime, transitionProgress);
         
-        // 中心を基準に変形
-        ctx.translate(this.previewCanvas.width / 2 + x, this.previewCanvas.height / 2 + y);
+        // 中心を基準に変形（常に1920x1080基準）
+        ctx.translate(1920 / 2 + x, 1080 / 2 + y);
         ctx.rotate(rotation * Math.PI / 180);
         ctx.scale(scale, scale);
         ctx.globalAlpha = opacity * transitionProgress;
@@ -1348,8 +1348,9 @@ class StarlitTimelineApp {
     // トランジション効果を適用
     applyTransition(clip, localTime, progress) {
         const ctx = this.previewCtx;
-        const width = this.previewCanvas.width;
-        const height = this.previewCanvas.height;
+        // 常に1920x1080基準
+        const width = 1920;
+        const height = 1080;
         
         let transitionType = 'none';
         
