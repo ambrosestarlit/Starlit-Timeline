@@ -150,16 +150,68 @@ class StarlitTimelineApp {
     // ファイル管理
     importMedia() {
         const input = document.getElementById('fileInput');
-        input.accept = 'image/*,video/*,audio/*'; // すべてのメディアタイプを許可
+        const isSequence = document.getElementById('sequenceCheckbox').checked;
+        
+        if (isSequence) {
+            // 連番の場合はフォルダ選択
+            input.setAttribute('webkitdirectory', '');
+            input.setAttribute('directory', '');
+            input.removeAttribute('accept');
+        } else {
+            // 通常の場合はファイル選択
+            input.removeAttribute('webkitdirectory');
+            input.removeAttribute('directory');
+            input.accept = 'image/*,video/*,audio/*';
+        }
+        
+        input.multiple = true;
         input.click();
     }
     
     handleFileSelect(event) {
-        const files = event.target.files;
-        for (let file of files) {
-            this.addAsset(file);
+        const files = Array.from(event.target.files);
+        const isSequence = document.getElementById('sequenceCheckbox').checked;
+        
+        if (isSequence && files.length > 0) {
+            // 連番画像として処理 - 画像ファイルのみフィルター
+            const imageFiles = files.filter(f => f.type.startsWith('image/'));
+            
+            if (imageFiles.length > 0) {
+                this.addSequenceAsset(imageFiles);
+            } else {
+                alert('画像ファイルが見つかりませんでした');
+            }
+        } else {
+            // 通常の素材として処理
+            for (let file of files) {
+                this.addAsset(file);
+            }
         }
+        
         event.target.value = ''; // リセット
+        document.getElementById('sequenceCheckbox').checked = false; // チェックを解除
+    }
+    
+    // 連番画像素材を追加
+    addSequenceAsset(files) {
+        // ファイル名でソート
+        files.sort((a, b) => a.name.localeCompare(b.name));
+        
+        // フォルダ名を取得
+        const folderPath = files[0].webkitRelativePath || files[0].name;
+        const folderName = folderPath.split('/')[0] || '連番';
+        
+        const asset = {
+            id: Date.now() + Math.random(),
+            name: `${folderName} (連番)`,
+            type: 'sequence',
+            files: files,
+            urls: files.map(f => URL.createObjectURL(f)),
+            frameCount: files.length
+        };
+        
+        this.assets.push(asset);
+        this.renderAssets();
     }
     
     addAsset(file) {
@@ -185,9 +237,16 @@ class StarlitTimelineApp {
             : this.assets.filter(asset => asset.type === this.assetFilter);
         
         if (filteredAssets.length === 0) {
+            const filterNames = {
+                'all': '素材',
+                'image': '画像',
+                'video': '動画',
+                'audio': '音声',
+                'sequence': '連番'
+            };
             const message = this.assetFilter === 'all' 
                 ? '素材をドロップまたは➕ボタンで追加' 
-                : `${this.assetFilter === 'image' ? '画像' : this.assetFilter === 'video' ? '動画' : '音声'}素材がありません`;
+                : `${filterNames[this.assetFilter]}素材がありません`;
             explorer.innerHTML = `<div class="empty-message">${message}</div>`;
             return;
         }
@@ -201,14 +260,19 @@ class StarlitTimelineApp {
             const icon = {
                 'image': '🖼️',
                 'video': '🎬',
-                'audio': '🎵'
+                'audio': '🎵',
+                'sequence': '📹'
             }[asset.type] || '📄';
+            
+            const typeDisplay = asset.type === 'sequence' 
+                ? `連番 (${asset.frameCount}枚)` 
+                : asset.type;
             
             item.innerHTML = `
                 <div class="asset-thumbnail">${icon}</div>
                 <div class="asset-info">
                     <div class="asset-name">${asset.name}</div>
-                    <div class="asset-type">${asset.type}</div>
+                    <div class="asset-type">${typeDisplay}</div>
                 </div>
             `;
             
@@ -279,6 +343,7 @@ class StarlitTimelineApp {
             startTime: Math.max(0, startTime),
             duration: 5, // デフォルト5秒
             volume: 1.0, // 音量 (0.0 - 1.0)
+            loopCount: 1, // ループ回数
             useOriginalSize: true, // 原寸表示フラグ
             transitionIn: {
                 type: 'none',
@@ -296,6 +361,12 @@ class StarlitTimelineApp {
                 scale: [{time: 0, value: 1}]
             }
         };
+        
+        // 連番アセットの場合
+        if (asset.type === 'sequence') {
+            clip.currentFrame = 0;
+            clip.frameRate = 30; // デフォルト30fps
+        }
         
         // 音声素材の場合、AudioElementを準備
         if (asset.type === 'audio') {
@@ -394,25 +465,42 @@ class StarlitTimelineApp {
         const y = clip.track * this.trackHeight + 5;
         const width = clip.duration * this.zoom;
         const height = this.trackHeight - 10;
+        const radius = 8; // 角丸の半径
         
         // クリップ背景 - 音声クリップは異なる色
         if (clip.asset.type === 'audio') {
             ctx.fillStyle = clip === this.selectedClip ? '#D2691E' : '#8B6914';
+        } else if (clip.asset.type === 'sequence') {
+            ctx.fillStyle = clip === this.selectedClip ? '#D2691E' : '#6B5423';
         } else {
             ctx.fillStyle = clip === this.selectedClip ? '#D2691E' : '#6B4423';
         }
-        ctx.fillRect(x, y, width, height);
+        
+        // 角丸矩形を描画
+        ctx.beginPath();
+        ctx.moveTo(x + radius, y);
+        ctx.lineTo(x + width - radius, y);
+        ctx.arcTo(x + width, y, x + width, y + radius, radius);
+        ctx.lineTo(x + width, y + height - radius);
+        ctx.arcTo(x + width, y + height, x + width - radius, y + height, radius);
+        ctx.lineTo(x + radius, y + height);
+        ctx.arcTo(x, y + height, x, y + height - radius, radius);
+        ctx.lineTo(x, y + radius);
+        ctx.arcTo(x, y, x + radius, y, radius);
+        ctx.closePath();
+        ctx.fill();
         
         // ボーダー
         ctx.strokeStyle = '#5D3A1A';
         ctx.lineWidth = 2;
-        ctx.strokeRect(x, y, width, height);
+        ctx.stroke();
         
         // アイコンとテキスト
         const icon = {
             'image': '🖼️',
             'video': '🎬',
-            'audio': '🎵'
+            'audio': '🎵',
+            'sequence': '📹'
         }[clip.asset.type] || '📄';
         
         ctx.fillStyle = '#F5DEB3';
@@ -420,7 +508,15 @@ class StarlitTimelineApp {
         ctx.fillText(icon, x + 5, y + 25);
         
         ctx.font = '12px sans-serif';
-        ctx.fillText(clip.asset.name, x + 25, y + 20);
+        const displayName = clip.asset.name.length > 20 ? clip.asset.name.substring(0, 20) + '...' : clip.asset.name;
+        ctx.fillText(displayName, x + 25, y + 20);
+        
+        // ループインジケーター
+        if ((clip.asset.type === 'video' || clip.asset.type === 'sequence') && clip.loopCount > 1) {
+            ctx.fillStyle = '#00FF00';
+            ctx.font = '10px sans-serif';
+            ctx.fillText(`×${clip.loopCount}`, x + 25, y + 35);
+        }
         
         // トランジションインジケーター
         this.drawTransitionIndicators(clip, x, y, width, height);
@@ -707,8 +803,34 @@ class StarlitTimelineApp {
             `;
         }
         
+        // 動画・連番アニメーションの場合はループ設定
+        if (clip.asset.type === 'video' || clip.asset.type === 'sequence') {
+            propertiesHTML += `
+                <div class="property-section-header">🔁 ループ</div>
+                
+                <div class="property-group">
+                    <div class="property-label">ループ回数: <span id="loopCountValue">${clip.loopCount}</span></div>
+                    <input type="range" class="property-slider" value="${clip.loopCount}" 
+                        min="1" max="10" step="1"
+                        oninput="app.updateClipProperty('loopCount', parseInt(this.value)); document.getElementById('loopCountValue').textContent = this.value">
+                </div>
+            `;
+            
+            // 連番の場合はフレームレート設定
+            if (clip.asset.type === 'sequence') {
+                propertiesHTML += `
+                    <div class="property-group">
+                        <div class="property-label">フレームレート: <span id="frameRateValue">${clip.frameRate || 30} fps</span></div>
+                        <input type="range" class="property-slider" value="${clip.frameRate || 30}" 
+                            min="1" max="60" step="1"
+                            oninput="app.updateClipProperty('frameRate', parseInt(this.value)); document.getElementById('frameRateValue').textContent = this.value + ' fps'">
+                    </div>
+                `;
+            }
+        }
+        
         // 映像クリップの場合はトランスフォーム設定
-        if (clip.asset.type === 'image' || clip.asset.type === 'video') {
+        if (clip.asset.type === 'image' || clip.asset.type === 'video' || clip.asset.type === 'sequence') {
             const currentX = this.getKeyframeValue(clip, 'x', localTime);
             const currentY = this.getKeyframeValue(clip, 'y', localTime);
             const currentRotation = this.getKeyframeValue(clip, 'rotation', localTime);
@@ -904,6 +1026,14 @@ class StarlitTimelineApp {
     async renderClip(clip) {
         const localTime = this.currentTime - clip.startTime;
         
+        // ループ処理
+        let effectiveLocalTime = localTime;
+        if (clip.loopCount > 1 && (clip.asset.type === 'video' || clip.asset.type === 'sequence')) {
+            // ビデオまたは連番の実際の長さを計算
+            let actualDuration = clip.duration / clip.loopCount;
+            effectiveLocalTime = localTime % actualDuration;
+        }
+        
         // トランジション進行度を計算
         let transitionProgress = 1;
         
@@ -947,11 +1077,61 @@ class StarlitTimelineApp {
         if (clip.asset.type === 'image') {
             await this.drawImage(clip);
         } else if (clip.asset.type === 'video') {
-            await this.drawVideo(clip, localTime);
+            await this.drawVideo(clip, effectiveLocalTime);
             this.playAudioClip(clip, localTime);
+        } else if (clip.asset.type === 'sequence') {
+            await this.drawSequence(clip, effectiveLocalTime);
         }
         
         ctx.restore();
+    }
+    
+    // 連番アニメーションを描画
+    async drawSequence(clip, localTime) {
+        const frameRate = clip.frameRate || 30;
+        const frameIndex = Math.floor(localTime * frameRate) % clip.asset.frameCount;
+        
+        return new Promise((resolve) => {
+            if (!clip.sequenceImages) {
+                clip.sequenceImages = [];
+                clip.asset.urls.forEach((url, idx) => {
+                    const img = new Image();
+                    img.src = url;
+                    clip.sequenceImages[idx] = img;
+                });
+            }
+            
+            const img = clip.sequenceImages[frameIndex];
+            if (img && img.complete) {
+                this.drawSequenceFrame(clip, img);
+            }
+            resolve();
+        });
+    }
+    
+    drawSequenceFrame(clip, img) {
+        const ctx = this.previewCtx;
+        
+        let drawWidth, drawHeight;
+        
+        if (clip.useOriginalSize && img.width && img.height) {
+            drawWidth = img.width;
+            drawHeight = img.height;
+        } else {
+            const aspectRatio = img.width / img.height;
+            const maxWidth = 800;
+            const maxHeight = 600;
+            
+            drawWidth = maxWidth;
+            drawHeight = maxWidth / aspectRatio;
+            
+            if (drawHeight > maxHeight) {
+                drawHeight = maxHeight;
+                drawWidth = maxHeight * aspectRatio;
+            }
+        }
+        
+        ctx.drawImage(img, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
     }
     
     // トランジション効果を適用

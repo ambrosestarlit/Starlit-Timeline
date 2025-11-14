@@ -55,7 +55,13 @@
             <div class="sidebar left-sidebar">
                 <div class="sidebar-header">
                     <h3>📁 素材</h3>
-                    <button class="round-button small" onclick="app.importMedia()" title="素材を追加">➕</button>
+                    <div class="header-controls">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="sequenceCheckbox">
+                            <span>連番</span>
+                        </label>
+                        <button class="round-button small" onclick="app.importMedia()" title="素材を追加">➕</button>
+                    </div>
                 </div>
                 <div class="asset-filter">
                     <button class="filter-button active" onclick="app.setAssetFilter('all')" data-filter="all">
@@ -69,6 +75,9 @@
                     </button>
                     <button class="filter-button" onclick="app.setAssetFilter('audio')" data-filter="audio">
                         🎵 音声
+                    </button>
+                    <button class="filter-button" onclick="app.setAssetFilter('sequence')" data-filter="sequence">
+                        📹 連番
                     </button>
                 </div>
                 <div class="asset-explorer" id="assetExplorer" ondrop="app.handleAssetDrop(event)" ondragover="event.preventDefault()">
