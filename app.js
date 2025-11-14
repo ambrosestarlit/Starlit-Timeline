@@ -35,9 +35,31 @@ class StarlitTimelineApp {
             }
         };
         
+        // 音声コンテキスト
+        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        this.audioSources = [];
+        this.masterGainNode = this.audioContext.createGain();
+        this.masterGainNode.connect(this.audioContext.destination);
+        
+        // トランジション設定
+        this.availableTransitions = [
+            { id: 'none', name: 'なし' },
+            { id: 'fade', name: 'フェード' },
+            { id: 'dissolve', name: 'ディゾルブ' },
+            { id: 'wipe_left', name: 'ワイプ(左)' },
+            { id: 'wipe_right', name: 'ワイプ(右)' },
+            { id: 'wipe_up', name: 'ワイプ(上)' },
+            { id: 'wipe_down', name: 'ワイプ(下)' },
+            { id: 'slide_left', name: 'スライド(左)' },
+            { id: 'slide_right', name: 'スライド(右)' }
+        ];
+        
         // Undo/Redo
         this.history = [];
         this.historyIndex = -1;
+        
+        // 素材フィルター
+        this.assetFilter = 'all'; // all, image, video, audio
         
         this.init();
     }
@@ -147,12 +169,20 @@ class StarlitTimelineApp {
         const explorer = document.getElementById('assetExplorer');
         explorer.innerHTML = '';
         
-        if (this.assets.length === 0) {
-            explorer.innerHTML = '<div class="empty-message">素材をドロップまたは➕ボタンで追加</div>';
+        // フィルター適用
+        const filteredAssets = this.assetFilter === 'all' 
+            ? this.assets 
+            : this.assets.filter(asset => asset.type === this.assetFilter);
+        
+        if (filteredAssets.length === 0) {
+            const message = this.assetFilter === 'all' 
+                ? '素材をドロップまたは➕ボタンで追加' 
+                : `${this.assetFilter === 'image' ? '画像' : this.assetFilter === 'video' ? '動画' : '音声'}素材がありません`;
+            explorer.innerHTML = `<div class="empty-message">${message}</div>`;
             return;
         }
         
-        this.assets.forEach(asset => {
+        filteredAssets.forEach(asset => {
             const item = document.createElement('div');
             item.className = 'asset-item';
             item.draggable = true;
@@ -178,6 +208,22 @@ class StarlitTimelineApp {
             
             explorer.appendChild(item);
         });
+    }
+    
+    // 素材フィルター設定
+    setAssetFilter(filter) {
+        this.assetFilter = filter;
+        
+        // ボタンのアクティブ状態を更新
+        document.querySelectorAll('.filter-button').forEach(btn => {
+            if (btn.dataset.filter === filter) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+        
+        this.renderAssets();
     }
     
     handleAssetDrop(event) {
@@ -215,6 +261,16 @@ class StarlitTimelineApp {
             track: Math.max(0, Math.min(track, this.trackCount - 1)),
             startTime: Math.max(0, startTime),
             duration: 5, // デフォルト5秒
+            volume: 1.0, // 音量 (0.0 - 1.0)
+            useOriginalSize: true, // 原寸表示フラグ
+            transitionIn: {
+                type: 'none',
+                duration: 0.5
+            },
+            transitionOut: {
+                type: 'none',
+                duration: 0.5
+            },
             keyframes: {
                 x: [{time: 0, value: 0}],
                 y: [{time: 0, value: 0}],
@@ -224,9 +280,44 @@ class StarlitTimelineApp {
             }
         };
         
+        // 音声素材の場合、AudioElementを準備
+        if (asset.type === 'audio') {
+            this.prepareAudioClip(clip);
+        }
+        
+        // 画像・動画の場合、原寸情報を取得
+        if (asset.type === 'image' || asset.type === 'video') {
+            this.loadAssetDimensions(clip);
+        }
+        
         this.clips.push(clip);
         this.drawTimeline();
         this.saveHistory();
+    }
+    
+    // 素材の原寸情報を読み込み
+    loadAssetDimensions(clip) {
+        if (clip.asset.type === 'image') {
+            const img = new Image();
+            img.onload = () => {
+                clip.originalWidth = img.width;
+                clip.originalHeight = img.height;
+            };
+            img.src = clip.asset.url;
+        } else if (clip.asset.type === 'video') {
+            const video = document.createElement('video');
+            video.onloadedmetadata = () => {
+                clip.originalWidth = video.videoWidth;
+                clip.originalHeight = video.videoHeight;
+            };
+            video.src = clip.asset.url;
+        }
+    }
+    
+    // 音声クリップの準備
+    prepareAudioClip(clip) {
+        clip.audioElement = new Audio(clip.asset.url);
+        clip.audioElement.preload = 'auto';
     }
     
     // タイムライン描画
@@ -287,8 +378,12 @@ class StarlitTimelineApp {
         const width = clip.duration * this.zoom;
         const height = this.trackHeight - 10;
         
-        // クリップ背景
-        ctx.fillStyle = clip === this.selectedClip ? '#D2691E' : '#6B4423';
+        // クリップ背景 - 音声クリップは異なる色
+        if (clip.asset.type === 'audio') {
+            ctx.fillStyle = clip === this.selectedClip ? '#D2691E' : '#8B6914';
+        } else {
+            ctx.fillStyle = clip === this.selectedClip ? '#D2691E' : '#6B4423';
+        }
         ctx.fillRect(x, y, width, height);
         
         // ボーダー
@@ -296,13 +391,82 @@ class StarlitTimelineApp {
         ctx.lineWidth = 2;
         ctx.strokeRect(x, y, width, height);
         
-        // テキスト
+        // アイコンとテキスト
+        const icon = {
+            'image': '🖼️',
+            'video': '🎬',
+            'audio': '🎵'
+        }[clip.asset.type] || '📄';
+        
         ctx.fillStyle = '#F5DEB3';
+        ctx.font = '16px sans-serif';
+        ctx.fillText(icon, x + 5, y + 25);
+        
         ctx.font = '12px sans-serif';
-        ctx.fillText(clip.asset.name, x + 5, y + 20);
+        ctx.fillText(clip.asset.name, x + 25, y + 20);
+        
+        // トランジションインジケーター
+        this.drawTransitionIndicators(clip, x, y, width, height);
         
         // キーフレームインジケーター
-        this.drawKeyframeIndicators(clip, x, y, height);
+        if (clip.asset.type !== 'audio') {
+            this.drawKeyframeIndicators(clip, x, y, height);
+        }
+        
+        // 音声クリップの場合は波形表示
+        if (clip.asset.type === 'audio') {
+            this.drawAudioWaveform(clip, x, y, width, height);
+        }
+    }
+    
+    drawTransitionIndicators(clip, x, y, width, height) {
+        const ctx = this.timelineCtx;
+        
+        // トランジションイン
+        if (clip.transitionIn.type !== 'none') {
+            const transWidth = clip.transitionIn.duration * this.zoom;
+            ctx.fillStyle = 'rgba(255, 255, 0, 0.3)';
+            ctx.fillRect(x, y, Math.min(transWidth, width), height);
+            
+            ctx.fillStyle = '#FFFF00';
+            ctx.font = '10px sans-serif';
+            ctx.fillText('IN', x + 2, y + 12);
+        }
+        
+        // トランジションアウト
+        if (clip.transitionOut.type !== 'none') {
+            const transWidth = clip.transitionOut.duration * this.zoom;
+            const startX = x + width - transWidth;
+            ctx.fillStyle = 'rgba(255, 255, 0, 0.3)';
+            ctx.fillRect(Math.max(startX, x), y, Math.min(transWidth, width), height);
+            
+            ctx.fillStyle = '#FFFF00';
+            ctx.font = '10px sans-serif';
+            ctx.fillText('OUT', x + width - 30, y + 12);
+        }
+    }
+    
+    drawAudioWaveform(clip, x, y, width, height) {
+        const ctx = this.timelineCtx;
+        const centerY = y + height / 2;
+        
+        // シンプルな波形表示
+        ctx.strokeStyle = '#F5DEB3';
+        ctx.lineWidth = 1;
+        ctx.globalAlpha = 0.5;
+        
+        ctx.beginPath();
+        for (let i = 0; i < width; i += 5) {
+            const waveHeight = Math.sin(i / 10) * (height / 4);
+            if (i === 0) {
+                ctx.moveTo(x + i, centerY + waveHeight);
+            } else {
+                ctx.lineTo(x + i, centerY + waveHeight);
+            }
+        }
+        ctx.stroke();
+        
+        ctx.globalAlpha = 1;
     }
     
     drawKeyframeIndicators(clip, clipX, clipY, clipHeight) {
@@ -456,76 +620,168 @@ class StarlitTimelineApp {
         const clip = this.selectedClip;
         const localTime = this.currentTime - clip.startTime;
         
-        panel.innerHTML = `
+        let propertiesHTML = `
             <div class="property-group">
                 <div class="property-label">クリップ名</div>
                 <div class="property-value">${clip.asset.name}</div>
             </div>
             
             <div class="property-group">
-                <div class="property-label">開始時間 (秒)</div>
-                <input type="number" class="property-input" value="${clip.startTime.toFixed(2)}" 
-                    onchange="app.updateClipProperty('startTime', parseFloat(this.value))">
+                <div class="property-label">開始時間: <span id="startTimeValue">${clip.startTime.toFixed(2)}秒</span></div>
+                <input type="range" class="property-slider" value="${clip.startTime.toFixed(2)}" 
+                    min="0" max="30" step="0.1"
+                    oninput="app.updateClipProperty('startTime', parseFloat(this.value)); document.getElementById('startTimeValue').textContent = this.value + '秒'">
             </div>
             
             <div class="property-group">
-                <div class="property-label">継続時間 (秒)</div>
-                <input type="number" class="property-input" value="${clip.duration.toFixed(2)}" min="0.1"
-                    onchange="app.updateClipProperty('duration', parseFloat(this.value))">
+                <div class="property-label">継続時間: <span id="durationValue">${clip.duration.toFixed(2)}秒</span></div>
+                <input type="range" class="property-slider" value="${clip.duration.toFixed(2)}" 
+                    min="0.1" max="30" step="0.1"
+                    oninput="app.updateClipProperty('duration', parseFloat(this.value)); document.getElementById('durationValue').textContent = this.value + '秒'">
+            </div>
+            
+            <!-- トランジション設定 -->
+            <div class="property-section-header">🎬 トランジション</div>
+            
+            <div class="property-group">
+                <div class="property-label">イン</div>
+                <select class="property-input" onchange="app.updateTransition('in', 'type', this.value)">
+                    ${this.availableTransitions.map(t => 
+                        `<option value="${t.id}" ${clip.transitionIn.type === t.id ? 'selected' : ''}>${t.name}</option>`
+                    ).join('')}
+                </select>
             </div>
             
             <div class="property-group">
-                <div class="property-label">X位置</div>
-                <input type="number" class="property-input" value="${this.getKeyframeValue(clip, 'x', localTime).toFixed(0)}"
-                    onchange="app.setKeyframeValue('x', parseFloat(this.value))">
-                <div class="keyframe-controls">
-                    <button class="keyframe-button ${this.hasKeyframeAt(clip, 'x', localTime) ? 'active' : ''}" 
-                        onclick="app.toggleKeyframe('x')">💎 キーフレーム</button>
-                </div>
+                <div class="property-label">イン時間: <span id="transInDurationValue">${clip.transitionIn.duration.toFixed(2)}秒</span></div>
+                <input type="range" class="property-slider" value="${clip.transitionIn.duration.toFixed(2)}" 
+                    min="0.1" max="${clip.duration / 2}" step="0.1"
+                    oninput="app.updateTransition('in', 'duration', parseFloat(this.value)); document.getElementById('transInDurationValue').textContent = this.value + '秒'">
             </div>
             
             <div class="property-group">
-                <div class="property-label">Y位置</div>
-                <input type="number" class="property-input" value="${this.getKeyframeValue(clip, 'y', localTime).toFixed(0)}"
-                    onchange="app.setKeyframeValue('y', parseFloat(this.value))">
-                <div class="keyframe-controls">
-                    <button class="keyframe-button ${this.hasKeyframeAt(clip, 'y', localTime) ? 'active' : ''}" 
-                        onclick="app.toggleKeyframe('y')">💎 キーフレーム</button>
-                </div>
+                <div class="property-label">アウト</div>
+                <select class="property-input" onchange="app.updateTransition('out', 'type', this.value)">
+                    ${this.availableTransitions.map(t => 
+                        `<option value="${t.id}" ${clip.transitionOut.type === t.id ? 'selected' : ''}>${t.name}</option>`
+                    ).join('')}
+                </select>
             </div>
             
             <div class="property-group">
-                <div class="property-label">回転 (度)</div>
-                <input type="number" class="property-input" value="${this.getKeyframeValue(clip, 'rotation', localTime).toFixed(0)}"
-                    onchange="app.setKeyframeValue('rotation', parseFloat(this.value))">
-                <div class="keyframe-controls">
-                    <button class="keyframe-button ${this.hasKeyframeAt(clip, 'rotation', localTime) ? 'active' : ''}" 
-                        onclick="app.toggleKeyframe('rotation')">💎 キーフレーム</button>
-                </div>
-            </div>
-            
-            <div class="property-group">
-                <div class="property-label">不透明度 (0-1)</div>
-                <input type="number" class="property-input" value="${this.getKeyframeValue(clip, 'opacity', localTime).toFixed(2)}" 
-                    min="0" max="1" step="0.01"
-                    onchange="app.setKeyframeValue('opacity', parseFloat(this.value))">
-                <div class="keyframe-controls">
-                    <button class="keyframe-button ${this.hasKeyframeAt(clip, 'opacity', localTime) ? 'active' : ''}" 
-                        onclick="app.toggleKeyframe('opacity')">💎 キーフレーム</button>
-                </div>
-            </div>
-            
-            <div class="property-group">
-                <div class="property-label">スケール</div>
-                <input type="number" class="property-input" value="${this.getKeyframeValue(clip, 'scale', localTime).toFixed(2)}" 
-                    min="0.1" step="0.1"
-                    onchange="app.setKeyframeValue('scale', parseFloat(this.value))">
-                <div class="keyframe-controls">
-                    <button class="keyframe-button ${this.hasKeyframeAt(clip, 'scale', localTime) ? 'active' : ''}" 
-                        onclick="app.toggleKeyframe('scale')">💎 キーフレーム</button>
-                </div>
+                <div class="property-label">アウト時間: <span id="transOutDurationValue">${clip.transitionOut.duration.toFixed(2)}秒</span></div>
+                <input type="range" class="property-slider" value="${clip.transitionOut.duration.toFixed(2)}" 
+                    min="0.1" max="${clip.duration / 2}" step="0.1"
+                    oninput="app.updateTransition('out', 'duration', parseFloat(this.value)); document.getElementById('transOutDurationValue').textContent = this.value + '秒'">
             </div>
         `;
+        
+        // 音声クリップの場合はボリューム設定
+        if (clip.asset.type === 'audio' || clip.asset.type === 'video') {
+            propertiesHTML += `
+                <div class="property-section-header">🔊 音声</div>
+                
+                <div class="property-group">
+                    <div class="property-label">音量: <span id="volumeValue">${(clip.volume * 100).toFixed(0)}%</span></div>
+                    <input type="range" class="property-slider" value="${(clip.volume * 100).toFixed(0)}" 
+                        min="0" max="100" step="1"
+                        oninput="app.updateClipProperty('volume', parseFloat(this.value) / 100); document.getElementById('volumeValue').textContent = this.value + '%'">
+                </div>
+            `;
+        }
+        
+        // 映像クリップの場合はトランスフォーム設定
+        if (clip.asset.type === 'image' || clip.asset.type === 'video') {
+            const currentX = this.getKeyframeValue(clip, 'x', localTime);
+            const currentY = this.getKeyframeValue(clip, 'y', localTime);
+            const currentRotation = this.getKeyframeValue(clip, 'rotation', localTime);
+            const currentOpacity = this.getKeyframeValue(clip, 'opacity', localTime);
+            const currentScale = this.getKeyframeValue(clip, 'scale', localTime);
+            
+            propertiesHTML += `
+                <div class="property-section-header">📐 トランスフォーム</div>
+                
+                <div class="property-group">
+                    <div class="property-label">X位置: <span id="xValue">${currentX.toFixed(0)}px</span></div>
+                    <input type="range" class="property-slider" value="${currentX.toFixed(0)}"
+                        min="-960" max="960" step="1"
+                        oninput="app.setKeyframeValue('x', parseFloat(this.value)); document.getElementById('xValue').textContent = this.value + 'px'">
+                    <div class="keyframe-controls">
+                        <button class="keyframe-button ${this.hasKeyframeAt(clip, 'x', localTime) ? 'active' : ''}" 
+                            onclick="app.toggleKeyframe('x')">💎 キーフレーム</button>
+                    </div>
+                </div>
+                
+                <div class="property-group">
+                    <div class="property-label">Y位置: <span id="yValue">${currentY.toFixed(0)}px</span></div>
+                    <input type="range" class="property-slider" value="${currentY.toFixed(0)}"
+                        min="-540" max="540" step="1"
+                        oninput="app.setKeyframeValue('y', parseFloat(this.value)); document.getElementById('yValue').textContent = this.value + 'px'">
+                    <div class="keyframe-controls">
+                        <button class="keyframe-button ${this.hasKeyframeAt(clip, 'y', localTime) ? 'active' : ''}" 
+                            onclick="app.toggleKeyframe('y')">💎 キーフレーム</button>
+                    </div>
+                </div>
+                
+                <div class="property-group">
+                    <div class="property-label">回転: <span id="rotationValue">${currentRotation.toFixed(0)}°</span></div>
+                    <input type="range" class="property-slider" value="${currentRotation.toFixed(0)}"
+                        min="-180" max="180" step="1"
+                        oninput="app.setKeyframeValue('rotation', parseFloat(this.value)); document.getElementById('rotationValue').textContent = this.value + '°'">
+                    <div class="keyframe-controls">
+                        <button class="keyframe-button ${this.hasKeyframeAt(clip, 'rotation', localTime) ? 'active' : ''}" 
+                            onclick="app.toggleKeyframe('rotation')">💎 キーフレーム</button>
+                    </div>
+                </div>
+                
+                <div class="property-group">
+                    <div class="property-label">不透明度: <span id="opacityValue">${(currentOpacity * 100).toFixed(0)}%</span></div>
+                    <input type="range" class="property-slider" value="${(currentOpacity * 100).toFixed(0)}" 
+                        min="0" max="100" step="1"
+                        oninput="app.setKeyframeValue('opacity', parseFloat(this.value) / 100); document.getElementById('opacityValue').textContent = this.value + '%'">
+                    <div class="keyframe-controls">
+                        <button class="keyframe-button ${this.hasKeyframeAt(clip, 'opacity', localTime) ? 'active' : ''}" 
+                            onclick="app.toggleKeyframe('opacity')">💎 キーフレーム</button>
+                    </div>
+                </div>
+                
+                <div class="property-group">
+                    <div class="property-label">スケール: <span id="scaleValue">${(currentScale * 100).toFixed(0)}%</span></div>
+                    <input type="range" class="property-slider" value="${(currentScale * 100).toFixed(0)}" 
+                        min="10" max="300" step="1"
+                        oninput="app.setKeyframeValue('scale', parseFloat(this.value) / 100); document.getElementById('scaleValue').textContent = this.value + '%'">
+                    <div class="keyframe-controls">
+                        <button class="keyframe-button ${this.hasKeyframeAt(clip, 'scale', localTime) ? 'active' : ''}" 
+                            onclick="app.toggleKeyframe('scale')">💎 キーフレーム</button>
+                    </div>
+                </div>
+                
+                <div class="property-group">
+                    <div class="property-label">
+                        <input type="checkbox" id="useOriginalSize" ${clip.useOriginalSize ? 'checked' : ''} 
+                            onchange="app.updateClipProperty('useOriginalSize', this.checked)">
+                        原寸表示
+                    </div>
+                </div>
+            `;
+        }
+        
+        panel.innerHTML = propertiesHTML;
+    }
+    
+    // トランジション更新
+    updateTransition(direction, property, value) {
+        if (!this.selectedClip) return;
+        
+        if (direction === 'in') {
+            this.selectedClip.transitionIn[property] = value;
+        } else {
+            this.selectedClip.transitionOut[property] = value;
+        }
+        
+        this.drawTimeline();
+        this.updatePreview();
+        this.saveHistory();
     }
     
     updateClipProperty(property, value) {
@@ -631,6 +887,20 @@ class StarlitTimelineApp {
     async renderClip(clip) {
         const localTime = this.currentTime - clip.startTime;
         
+        // トランジション進行度を計算
+        let transitionProgress = 1;
+        
+        // トランジションイン
+        if (clip.transitionIn.type !== 'none' && localTime < clip.transitionIn.duration) {
+            transitionProgress = localTime / clip.transitionIn.duration;
+        }
+        
+        // トランジションアウト
+        if (clip.transitionOut.type !== 'none' && localTime > clip.duration - clip.transitionOut.duration) {
+            const timeInTransition = clip.duration - localTime;
+            transitionProgress = timeInTransition / clip.transitionOut.duration;
+        }
+        
         const x = this.getKeyframeValue(clip, 'x', localTime);
         const y = this.getKeyframeValue(clip, 'y', localTime);
         const rotation = this.getKeyframeValue(clip, 'rotation', localTime);
@@ -638,22 +908,114 @@ class StarlitTimelineApp {
         const scale = this.getKeyframeValue(clip, 'scale', localTime);
         
         const ctx = this.previewCtx;
+        
+        // 音声クリップの場合は音声のみ再生
+        if (clip.asset.type === 'audio') {
+            this.playAudioClip(clip, localTime);
+            return;
+        }
+        
         ctx.save();
+        
+        // トランジション効果を適用
+        this.applyTransition(clip, localTime, transitionProgress);
         
         // 中心を基準に変形
         ctx.translate(this.previewCanvas.width / 2 + x, this.previewCanvas.height / 2 + y);
         ctx.rotate(rotation * Math.PI / 180);
         ctx.scale(scale, scale);
-        ctx.globalAlpha = opacity;
+        ctx.globalAlpha = opacity * transitionProgress;
         
         // 素材を描画
         if (clip.asset.type === 'image') {
             await this.drawImage(clip);
         } else if (clip.asset.type === 'video') {
             await this.drawVideo(clip, localTime);
+            this.playAudioClip(clip, localTime);
         }
         
         ctx.restore();
+    }
+    
+    // トランジション効果を適用
+    applyTransition(clip, localTime, progress) {
+        const ctx = this.previewCtx;
+        const width = this.previewCanvas.width;
+        const height = this.previewCanvas.height;
+        
+        let transitionType = 'none';
+        
+        // トランジションイン
+        if (clip.transitionIn.type !== 'none' && localTime < clip.transitionIn.duration) {
+            transitionType = clip.transitionIn.type;
+        }
+        
+        // トランジションアウト
+        if (clip.transitionOut.type !== 'none' && localTime > clip.duration - clip.transitionOut.duration) {
+            transitionType = clip.transitionOut.type;
+        }
+        
+        if (transitionType === 'none') return;
+        
+        ctx.save();
+        
+        switch (transitionType) {
+            case 'fade':
+            case 'dissolve':
+                // フェード/ディゾルブは不透明度で処理済み
+                break;
+                
+            case 'wipe_left':
+                ctx.beginPath();
+                ctx.rect(0, 0, width * progress, height);
+                ctx.clip();
+                break;
+                
+            case 'wipe_right':
+                ctx.beginPath();
+                ctx.rect(width * (1 - progress), 0, width * progress, height);
+                ctx.clip();
+                break;
+                
+            case 'wipe_up':
+                ctx.beginPath();
+                ctx.rect(0, 0, width, height * progress);
+                ctx.clip();
+                break;
+                
+            case 'wipe_down':
+                ctx.beginPath();
+                ctx.rect(0, height * (1 - progress), width, height * progress);
+                ctx.clip();
+                break;
+                
+            case 'slide_left':
+                ctx.translate(-width * (1 - progress), 0);
+                break;
+                
+            case 'slide_right':
+                ctx.translate(width * (1 - progress), 0);
+                break;
+        }
+        
+        ctx.restore();
+    }
+    
+    // 音声クリップ再生
+    playAudioClip(clip, localTime) {
+        if (!clip.audioElement) return;
+        
+        if (this.isPlaying) {
+            if (clip.audioElement.paused) {
+                clip.audioElement.currentTime = localTime;
+                clip.audioElement.volume = clip.volume || 1.0;
+                clip.audioElement.play().catch(e => console.log('Audio play error:', e));
+            }
+        } else {
+            if (!clip.audioElement.paused) {
+                clip.audioElement.pause();
+            }
+        }
     }
     
     async drawImage(clip) {
@@ -676,16 +1038,25 @@ class StarlitTimelineApp {
         const img = clip.imageElement;
         const ctx = this.previewCtx;
         
-        const aspectRatio = img.width / img.height;
-        const maxWidth = 800;
-        const maxHeight = 600;
+        let drawWidth, drawHeight;
         
-        let drawWidth = maxWidth;
-        let drawHeight = maxWidth / aspectRatio;
-        
-        if (drawHeight > maxHeight) {
-            drawHeight = maxHeight;
-            drawWidth = maxHeight * aspectRatio;
+        if (clip.useOriginalSize && clip.originalWidth && clip.originalHeight) {
+            // 原寸表示
+            drawWidth = clip.originalWidth;
+            drawHeight = clip.originalHeight;
+        } else {
+            // アスペクト比を維持してフィット
+            const aspectRatio = img.width / img.height;
+            const maxWidth = 800;
+            const maxHeight = 600;
+            
+            drawWidth = maxWidth;
+            drawHeight = maxWidth / aspectRatio;
+            
+            if (drawHeight > maxHeight) {
+                drawHeight = maxHeight;
+                drawWidth = maxHeight * aspectRatio;
+            }
         }
         
         ctx.drawImage(img, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
@@ -718,16 +1089,25 @@ class StarlitTimelineApp {
         const ctx = this.previewCtx;
         
         if (video.readyState >= 2) {
-            const aspectRatio = video.videoWidth / video.videoHeight;
-            const maxWidth = 800;
-            const maxHeight = 600;
+            let drawWidth, drawHeight;
             
-            let drawWidth = maxWidth;
-            let drawHeight = maxWidth / aspectRatio;
-            
-            if (drawHeight > maxHeight) {
-                drawHeight = maxHeight;
-                drawWidth = maxHeight * aspectRatio;
+            if (clip.useOriginalSize && clip.originalWidth && clip.originalHeight) {
+                // 原寸表示
+                drawWidth = clip.originalWidth;
+                drawHeight = clip.originalHeight;
+            } else {
+                // アスペクト比を維持してフィット
+                const aspectRatio = video.videoWidth / video.videoHeight;
+                const maxWidth = 800;
+                const maxHeight = 600;
+                
+                drawWidth = maxWidth;
+                drawHeight = maxWidth / aspectRatio;
+                
+                if (drawHeight > maxHeight) {
+                    drawHeight = maxHeight;
+                    drawWidth = maxHeight * aspectRatio;
+                }
             }
             
             ctx.drawImage(video, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
@@ -808,6 +1188,15 @@ class StarlitTimelineApp {
     stop() {
         this.pause();
         this.currentTime = 0;
+        
+        // すべての音声を停止
+        this.clips.forEach(clip => {
+            if (clip.audioElement && !clip.audioElement.paused) {
+                clip.audioElement.pause();
+                clip.audioElement.currentTime = 0;
+            }
+        });
+        
         this.updateTimeDisplay();
         this.updatePreview();
         this.drawTimeline();
@@ -1106,7 +1495,9 @@ class StarlitTimelineApp {
     }
     
     addAudioLayer() {
-        alert('音声レイヤー機能は開発中です');
+        const input = document.getElementById('fileInput');
+        input.accept = 'audio/*';
+        input.click();
     }
     
     addTextLayer() {

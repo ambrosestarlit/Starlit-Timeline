@@ -69,6 +69,20 @@
                     <h3>📁 素材</h3>
                     <button class="round-button small" onclick="app.importMedia()" title="素材を追加">➕</button>
                 </div>
+                <div class="asset-filter">
+                    <button class="filter-button active" onclick="app.setAssetFilter('all')" data-filter="all">
+                        すべて
+                    </button>
+                    <button class="filter-button" onclick="app.setAssetFilter('image')" data-filter="image">
+                        🖼️ 画像
+                    </button>
+                    <button class="filter-button" onclick="app.setAssetFilter('video')" data-filter="video">
+                        🎬 動画
+                    </button>
+                    <button class="filter-button" onclick="app.setAssetFilter('audio')" data-filter="audio">
+                        🎵 音声
+                    </button>
+                </div>
                 <div class="asset-explorer" id="assetExplorer" ondrop="app.handleAssetDrop(event)" ondragover="event.preventDefault()">
                     <div class="empty-message">素材をドロップまたは➕ボタンで追加</div>
                 </div>
