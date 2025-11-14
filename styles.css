@@ -780,6 +780,45 @@ body {
     margin-left: 8px;
 }
 
+/* グラデーションエフェクトセクション */
+.effect-section {
+    background: rgba(61, 35, 20, 0.3);
+    padding: 10px;
+    margin: 8px 0;
+    border-radius: 6px;
+    border: 1px solid var(--chocolate-dark);
+}
+
+.effect-section-title {
+    font-size: 12px;
+    font-weight: bold;
+    color: var(--accent-orange);
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--chocolate-dark);
+}
+
+.blend-mode-select {
+    width: 100%;
+    padding: 6px 10px;
+    background: var(--chocolate-main);
+    color: var(--biscuit-light);
+    border: 1px solid var(--chocolate-dark);
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    margin-top: 4px;
+}
+
+.blend-mode-select:hover {
+    background: var(--cocoa-color);
+}
+
+.blend-mode-select:focus {
+    outline: 2px solid var(--accent-orange);
+    outline-offset: 2px;
+}
+
 /* 空メッセージ */
 .empty-message {
     text-align: center;

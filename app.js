@@ -30,9 +30,17 @@ class StarlitTimelineApp {
             },
             gradient: {
                 enabled: false,
-                topColor: '#FFFF00',
-                bottomColor: '#0000FF',
-                opacity: 50
+                top: {
+                    color: '#FFFF00',
+                    height: 300,
+                    opacity: 50
+                },
+                bottom: {
+                    color: '#0000FF',
+                    height: 300,
+                    opacity: 50
+                },
+                blendMode: 'normal'
             }
         };
         
@@ -142,27 +150,33 @@ class StarlitTimelineApp {
             this.updatePreview();
         });
         
-        // グラデーション
-        document.getElementById('gradientTopColor').addEventListener('change', (e) => {
-            this.effects.gradient.topColor = e.target.value;
-            this.updatePreview();
-        });
-        
-        document.getElementById('gradientBottomColor').addEventListener('change', (e) => {
-            this.effects.gradient.bottomColor = e.target.value;
-            this.updatePreview();
-        });
-        
-        document.getElementById('gradientOpacity').addEventListener('input', (e) => {
-            this.effects.gradient.opacity = parseInt(e.target.value);
-            document.getElementById('gradientOpacityValue').textContent = `${e.target.value}%`;
-            this.updatePreview();
-        });
-        
+        // グラデーション - 有効/無効
         document.getElementById('gradientEnable').addEventListener('change', (e) => {
             this.effects.gradient.enabled = e.target.checked;
             this.updatePreview();
         });
+    }
+    
+    // グラデーションエフェクト更新（新規メソッド）
+    updateGradientEffect() {
+        // 上部
+        this.effects.gradient.top.color = document.getElementById('gradientTopColor').value;
+        this.effects.gradient.top.height = parseInt(document.getElementById('gradientTopHeight').value);
+        this.effects.gradient.top.opacity = parseInt(document.getElementById('gradientTopOpacity').value);
+        document.getElementById('gradientTopHeightValue').textContent = `${this.effects.gradient.top.height}px`;
+        document.getElementById('gradientTopOpacityValue').textContent = `${this.effects.gradient.top.opacity}%`;
+        
+        // 下部
+        this.effects.gradient.bottom.color = document.getElementById('gradientBottomColor').value;
+        this.effects.gradient.bottom.height = parseInt(document.getElementById('gradientBottomHeight').value);
+        this.effects.gradient.bottom.opacity = parseInt(document.getElementById('gradientBottomOpacity').value);
+        document.getElementById('gradientBottomHeightValue').textContent = `${this.effects.gradient.bottom.height}px`;
+        document.getElementById('gradientBottomOpacityValue').textContent = `${this.effects.gradient.bottom.opacity}%`;
+        
+        // ブレンドモード
+        this.effects.gradient.blendMode = document.getElementById('gradientBlendMode').value;
+        
+        this.updatePreview();
     }
     
     // ファイル管理
@@ -1534,17 +1548,44 @@ class StarlitTimelineApp {
         
         // グラデーション（先に描画 = レターボックスの下）
         if (this.effects.gradient.enabled) {
-            const gradient = ctx.createLinearGradient(0, 0, 0, height);
+            // ブレンドモード設定
+            ctx.globalCompositeOperation = this.effects.gradient.blendMode;
             
-            const opacity = this.effects.gradient.opacity / 100;
-            const topColor = this.hexToRgba(this.effects.gradient.topColor, opacity);
-            const bottomColor = this.hexToRgba(this.effects.gradient.bottomColor, opacity);
+            // 上部グラデーション
+            if (this.effects.gradient.top.height > 0) {
+                const topGradient = ctx.createLinearGradient(0, 0, 0, this.effects.gradient.top.height);
+                const topOpacity = this.effects.gradient.top.opacity / 100;
+                const topColor = this.hexToRgba(this.effects.gradient.top.color, topOpacity);
+                const topTransparent = this.hexToRgba(this.effects.gradient.top.color, 0);
+                
+                topGradient.addColorStop(0, topColor);
+                topGradient.addColorStop(1, topTransparent);
+                
+                ctx.fillStyle = topGradient;
+                ctx.fillRect(0, 0, width, this.effects.gradient.top.height);
+            }
             
-            gradient.addColorStop(0, topColor);
-            gradient.addColorStop(1, bottomColor);
+            // 下部グラデーション
+            if (this.effects.gradient.bottom.height > 0) {
+                const bottomGradient = ctx.createLinearGradient(
+                    0, 
+                    height - this.effects.gradient.bottom.height, 
+                    0, 
+                    height
+                );
+                const bottomOpacity = this.effects.gradient.bottom.opacity / 100;
+                const bottomTransparent = this.hexToRgba(this.effects.gradient.bottom.color, 0);
+                const bottomColor = this.hexToRgba(this.effects.gradient.bottom.color, bottomOpacity);
+                
+                bottomGradient.addColorStop(0, bottomTransparent);
+                bottomGradient.addColorStop(1, bottomColor);
+                
+                ctx.fillStyle = bottomGradient;
+                ctx.fillRect(0, height - this.effects.gradient.bottom.height, width, this.effects.gradient.bottom.height);
+            }
             
-            ctx.fillStyle = gradient;
-            ctx.fillRect(0, 0, width, height);
+            // ブレンドモードをリセット
+            ctx.globalCompositeOperation = 'source-over';
         }
         
         // レターボックス（後に描画 = グラデーションの上）

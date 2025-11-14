@@ -189,15 +189,42 @@
                                 <input type="checkbox" id="gradientEnable" onchange="app.updatePreview()">
                             </div>
                             <div class="effect-controls" id="gradientControls">
-                                <label>上部の色:</label>
-                                <input type="color" value="#FFFF00" id="gradientTopColor" onchange="app.updatePreview()">
+                                <div class="effect-section">
+                                    <div class="effect-section-title">🔼 上部グラデーション</div>
+                                    
+                                    <label>色:</label>
+                                    <input type="color" value="#FFFF00" id="gradientTopColor" onchange="app.updateGradientEffect()">
+                                    
+                                    <label>高さ: <span id="gradientTopHeightValue">300px</span></label>
+                                    <input type="range" min="0" max="1080" value="300" class="effect-slider" id="gradientTopHeight" oninput="app.updateGradientEffect()">
+                                    
+                                    <label>不透明度: <span id="gradientTopOpacityValue">50%</span></label>
+                                    <input type="range" min="0" max="100" value="50" class="effect-slider" id="gradientTopOpacity" oninput="app.updateGradientEffect()">
+                                </div>
                                 
-                                <label>下部の色:</label>
-                                <input type="color" value="#0000FF" id="gradientBottomColor" onchange="app.updatePreview()">
+                                <div class="effect-section">
+                                    <div class="effect-section-title">🔽 下部グラデーション</div>
+                                    
+                                    <label>色:</label>
+                                    <input type="color" value="#0000FF" id="gradientBottomColor" onchange="app.updateGradientEffect()">
+                                    
+                                    <label>高さ: <span id="gradientBottomHeightValue">300px</span></label>
+                                    <input type="range" min="0" max="1080" value="300" class="effect-slider" id="gradientBottomHeight" oninput="app.updateGradientEffect()">
+                                    
+                                    <label>不透明度: <span id="gradientBottomOpacityValue">50%</span></label>
+                                    <input type="range" min="0" max="100" value="50" class="effect-slider" id="gradientBottomOpacity" oninput="app.updateGradientEffect()">
+                                </div>
                                 
-                                <label>不透明度:</label>
-                                <input type="range" min="0" max="100" value="50" class="effect-slider" id="gradientOpacity" oninput="app.updatePreview()">
-                                <span id="gradientOpacityValue">50%</span>
+                                <div class="effect-section">
+                                    <div class="effect-section-title">🎨 ブレンドモード</div>
+                                    
+                                    <label>モード:</label>
+                                    <select id="gradientBlendMode" class="blend-mode-select" onchange="app.updateGradientEffect()">
+                                        <option value="normal">通常</option>
+                                        <option value="overlay">オーバーレイ</option>
+                                        <option value="screen">スクリーン</option>
+                                    </select>
+                                </div>
                             </div>
                         </div>
                     </div>
