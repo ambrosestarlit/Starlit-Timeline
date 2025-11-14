@@ -1529,6 +1529,9 @@ class StarlitTimelineApp {
         const width = this.previewCanvas.width;   // 1920
         const height = this.previewCanvas.height; // 1080
         
+        // 座標変換を完全にリセット（重要！）
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        
         // レターボックス（プロジェクト全体に適用）
         if (this.effects.letterbox.enabled) {
             ctx.fillStyle = this.effects.letterbox.color;

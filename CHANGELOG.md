@@ -1,62 +1,60 @@
 # Starlit Timeline Editor - 変更履歴 📋
 
-## v3.5 (2025/11/14) - レターボックス位置修正（再修正） 🎬
+## v3.5 (2025/11/14) - レターボックス位置修正（座標変換リセット） 🎬
 
 ### 🎯 修正内容
 
-**キャンバスの実際のサイズ（width/height属性）を正しく使用！**
+**エフェクト描画前に座標変換を完全リセット！**
 
-#### 🐛 問題点
+#### 🐛 真の原因
 
-- キャンバスHTML属性: `width="1920" height="1080"`
-- キャンバスCSS表示: `max-width: 100%; max-height: 400px;`
-- **以前の間違った修正**: 固定値1920x1080をハードコード
-- **実際の問題**: `this.previewCanvas.width/height` を使うべきところを固定値にしていた
+座標変換スタックの問題でした：
 
-#### ✨ 正しい修正
+1. `updatePreview()` が各クリップに対して `renderClip()` を呼ぶ
+2. `renderClip()` 内で `ctx.save()` → 座標変換（translate/rotate/scale） → `ctx.restore()`
+3. **しかし**: `ctx.restore()` が完全に元に戻らないケースがあった
+4. その状態で `applyEffects()` が実行される
+5. **結果**: レターボックスが変換された座標系で描画されてしまう
 
-すべての描画で `this.previewCanvas.width` と `this.previewCanvas.height` を使用：
+#### ✨ 解決方法
 
-1. **applyEffects() - エフェクト描画**
+`applyEffects()` の最初に `ctx.setTransform(1, 0, 0, 1, 0, 0)` を追加：
+
 ```javascript
-// 正しい方法
-const width = this.previewCanvas.width;   // HTMLのwidth属性 = 1920
-const height = this.previewCanvas.height; // HTMLのheight属性 = 1080
+applyEffects() {
+    const ctx = this.previewCtx;
+    const width = this.previewCanvas.width;
+    const height = this.previewCanvas.height;
+    
+    // 座標変換を完全にリセット（重要！）
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    
+    // レターボックス描画
+    if (this.effects.letterbox.enabled) {
+        ctx.fillRect(0, 0, width, this.effects.letterbox.height);
+        ctx.fillRect(0, height - this.effects.letterbox.height, width, this.effects.letterbox.height);
+    }
+    // ...
+}
 ```
 
-2. **renderClip() - 素材描画の中心位置**
-```javascript
-// 正しい方法
-ctx.translate(this.previewCanvas.width / 2 + x, this.previewCanvas.height / 2 + y);
-```
+#### 📝 `setTransform()` とは
 
-3. **applyTransition() - トランジション効果**
-```javascript
-// 正しい方法
-const width = this.previewCanvas.width;
-const height = this.previewCanvas.height;
-```
+Canvas APIの `setTransform(a, b, c, d, e, f)` メソッド：
+- 現在の変換行列を**完全に置き換える**（累積ではない）
+- `setTransform(1, 0, 0, 1, 0, 0)` = 単位行列 = **すべての変換をリセット**
 
-#### 📝 重要な理解
-
-**キャンバスには2つのサイズがある:**
-
-1. **内部解像度** (HTML属性): `<canvas width="1920" height="1080">`
-   - 実際の描画領域
-   - `this.previewCanvas.width` で取得
-   - 描画座標はこれを基準にする
-
-2. **表示サイズ** (CSS): `max-width: 100%; max-height: 400px;`
-   - ブラウザでの見た目のサイズ
-   - 内部解像度からCSSで自動スケーリング
-   - 描画には影響しない
+**他の方法との違い:**
+- `ctx.save()/restore()`: スタック管理だが、戻し忘れがある
+- `ctx.resetTransform()`: 同じ効果だが古いブラウザで非対応
+- `ctx.setTransform(1,0,0,1,0,0)`: **確実にリセット、互換性◎**
 
 #### 🎨 効果
 
-- ✅ **レターボックス**: キャンバス上端・下端に正確に配置
-- ✅ **素材の中心**: キャンバス中央に正確に配置
-- ✅ **トランジション**: キャンバス全体に正確に適用
-- ✅ **ずれなし**: CSS表示サイズに関係なく正しく描画
+- ✅ **レターボックス**: 常にキャンバス上端・下端に正確に配置
+- ✅ **グラデーション**: キャンバス全体に正確に適用  
+- ✅ **座標独立**: 素材の変換に影響されない
+- ✅ **確実性**: どんな状態からでもリセット可能
 
 ---
 
