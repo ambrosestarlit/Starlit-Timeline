@@ -207,6 +207,22 @@
                                     
                                     <label>不透明度: <span id="gradientTopOpacityValue">50%</span></label>
                                     <input type="range" min="0" max="100" value="50" class="effect-slider" id="gradientTopOpacity" oninput="app.updateGradientEffect()">
+                                    
+                                    <label>ブレンドモード:</label>
+                                    <select id="gradientTopBlendMode" class="blend-mode-select" onchange="app.updateGradientEffect()">
+                                        <option value="normal">通常</option>
+                                        <option value="overlay">オーバーレイ</option>
+                                        <option value="screen">スクリーン</option>
+                                        <option value="multiply">乗算</option>
+                                        <option value="darken">比較(暗)</option>
+                                        <option value="lighten">比較(明)</option>
+                                        <option value="color-dodge">覆い焼き</option>
+                                        <option value="color-burn">焼き込み</option>
+                                        <option value="hard-light">ハードライト</option>
+                                        <option value="soft-light">ソフトライト</option>
+                                        <option value="difference">差の絶対値</option>
+                                        <option value="exclusion">除外</option>
+                                    </select>
                                 </div>
                                 
                                 <div class="effect-section">
@@ -220,16 +236,21 @@
                                     
                                     <label>不透明度: <span id="gradientBottomOpacityValue">50%</span></label>
                                     <input type="range" min="0" max="100" value="50" class="effect-slider" id="gradientBottomOpacity" oninput="app.updateGradientEffect()">
-                                </div>
-                                
-                                <div class="effect-section">
-                                    <div class="effect-section-title">🎨 ブレンドモード</div>
                                     
-                                    <label>モード:</label>
-                                    <select id="gradientBlendMode" class="blend-mode-select" onchange="app.updateGradientEffect()">
+                                    <label>ブレンドモード:</label>
+                                    <select id="gradientBottomBlendMode" class="blend-mode-select" onchange="app.updateGradientEffect()">
                                         <option value="normal">通常</option>
                                         <option value="overlay">オーバーレイ</option>
                                         <option value="screen">スクリーン</option>
+                                        <option value="multiply">乗算</option>
+                                        <option value="darken">比較(暗)</option>
+                                        <option value="lighten">比較(明)</option>
+                                        <option value="color-dodge">覆い焼き</option>
+                                        <option value="color-burn">焼き込み</option>
+                                        <option value="hard-light">ハードライト</option>
+                                        <option value="soft-light">ソフトライト</option>
+                                        <option value="difference">差の絶対値</option>
+                                        <option value="exclusion">除外</option>
                                     </select>
                                 </div>
                             </div>
