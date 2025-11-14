@@ -353,12 +353,15 @@ class StarlitTimelineApp {
         const asset = this.assets.find(a => a.id == assetId);
         if (!asset) return;
         
+        const defaultDuration = 5; // デフォルト5秒
+        
         const clip = {
             id: Date.now() + Math.random(),
             asset: asset,
             track: Math.max(0, Math.min(track, this.trackCount - 1)),
             startTime: Math.max(0, startTime),
-            duration: 5, // デフォルト5秒
+            duration: defaultDuration,
+            originalDuration: defaultDuration, // 元の長さを保存
             volume: 1.0, // 音量 (0.0 - 1.0)
             loopCount: 1, // ループ回数
             useOriginalSize: true, // 原寸表示フラグ
@@ -970,7 +973,25 @@ class StarlitTimelineApp {
     
     updateClipProperty(property, value) {
         if (!this.selectedClip) return;
-        this.selectedClip[property] = value;
+        
+        // ループ回数を変更した場合、元の長さを保存
+        if (property === 'loopCount') {
+            // 初回の場合、現在の長さを元の長さとして保存
+            if (!this.selectedClip.originalDuration) {
+                this.selectedClip.originalDuration = this.selectedClip.duration;
+            }
+            
+            this.selectedClip[property] = value;
+            // クリップの長さをループ回数に合わせて変更
+            this.selectedClip.duration = this.selectedClip.originalDuration * value;
+            
+            console.log('ループ回数変更:', value);
+            console.log('元の長さ:', this.selectedClip.originalDuration);
+            console.log('新しい長さ:', this.selectedClip.duration);
+        } else {
+            this.selectedClip[property] = value;
+        }
+        
         this.drawTimeline();
         this.updatePreview();
         this.saveHistory();
