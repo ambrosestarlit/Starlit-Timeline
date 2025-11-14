@@ -305,6 +305,11 @@ class StarlitTimelineApp {
     handleAssetDrop(event) {
         event.preventDefault();
         
+        // クリップ移動中の場合は何もしない
+        if (this.isMovingClip) {
+            return;
+        }
+        
         const rect = event.target.getBoundingClientRect();
         const targetIsTimeline = event.target.id === 'timelineCanvas' || 
                                  event.target.closest('#timelineScroll');
@@ -666,10 +671,14 @@ class StarlitTimelineApp {
         if (clickedClip) {
             this.selectedClip = clickedClip;
             this.isDragging = true;
+            this.isMovingClip = true; // クリップ移動中フラグ
             this.dragStartX = x;
             this.dragStartY = y;
             this.updatePropertiesPanel();
             this.drawTimeline();
+            
+            // ブラウザのドラッグ&ドロップを無効化
+            e.preventDefault();
             return;
         }
         
@@ -710,6 +719,7 @@ class StarlitTimelineApp {
             this.saveHistory();
         }
         this.isDragging = false;
+        this.isMovingClip = false; // フラグをリセット
     }
     
     getClipAt(x, y) {
