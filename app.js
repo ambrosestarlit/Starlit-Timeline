@@ -90,10 +90,18 @@ class StarlitTimelineApp {
         this.timelineCanvas.addEventListener('mousemove', (e) => this.handleTimelineMouseMove(e));
         this.timelineCanvas.addEventListener('mouseup', (e) => this.handleTimelineMouseUp(e));
         
+        // タイムラインのドラッグ&ドロップ
+        const timelineScroll = document.getElementById('timelineScroll');
+        timelineScroll.addEventListener('drop', (e) => this.handleAssetDrop(e));
+        timelineScroll.addEventListener('dragover', (e) => e.preventDefault());
+        
+        this.timelineCanvas.addEventListener('drop', (e) => this.handleAssetDrop(e));
+        this.timelineCanvas.addEventListener('dragover', (e) => e.preventDefault());
+        
         // キーボードショートカット
         document.addEventListener('keydown', (e) => this.handleKeyDown(e));
         
-        // ドラッグ&ドロップ
+        // 素材エクスプローラーのドラッグ&ドロップ
         document.getElementById('assetExplorer').addEventListener('drop', (e) => this.handleAssetDrop(e));
         document.getElementById('assetExplorer').addEventListener('dragover', (e) => e.preventDefault());
     }
@@ -141,7 +149,9 @@ class StarlitTimelineApp {
     
     // ファイル管理
     importMedia() {
-        document.getElementById('fileInput').click();
+        const input = document.getElementById('fileInput');
+        input.accept = 'image/*,video/*,audio/*'; // すべてのメディアタイプを許可
+        input.click();
     }
     
     handleFileSelect(event) {
@@ -229,20 +239,27 @@ class StarlitTimelineApp {
     handleAssetDrop(event) {
         event.preventDefault();
         
-        // ファイルドロップ
-        if (event.dataTransfer.files.length > 0) {
+        const rect = event.target.getBoundingClientRect();
+        const targetIsTimeline = event.target.id === 'timelineCanvas' || 
+                                 event.target.closest('#timelineScroll');
+        
+        // ファイルドロップ (素材エクスプローラーへ)
+        if (event.dataTransfer.files.length > 0 && !targetIsTimeline) {
             for (let file of event.dataTransfer.files) {
                 this.addAsset(file);
             }
             return;
         }
         
-        // タイムラインへのドロップ
+        // タイムラインへのドロップ (素材エクスプローラーから)
         const assetId = event.dataTransfer.getData('assetId');
-        if (assetId) {
-            const rect = this.timelineCanvas.getBoundingClientRect();
-            const x = event.clientX - rect.left + this.timelineCanvas.parentElement.scrollLeft;
-            const y = event.clientY - rect.top + this.timelineCanvas.parentElement.scrollTop;
+        if (assetId && targetIsTimeline) {
+            // timelineCanvasの座標を取得
+            const canvasRect = this.timelineCanvas.getBoundingClientRect();
+            const scrollContainer = document.getElementById('timelineScroll');
+            
+            const x = event.clientX - canvasRect.left + scrollContainer.scrollLeft;
+            const y = event.clientY - canvasRect.top + scrollContainer.scrollTop;
             
             const time = x / this.zoom;
             const track = Math.floor(y / this.trackHeight);
@@ -1483,25 +1500,6 @@ class StarlitTimelineApp {
     
     async exportAudio() {
         alert('音声書き出し機能は開発中です');
-    }
-    
-    // レイヤー追加(簡易版)
-    addImageLayer() {
-        alert('素材エクスプローラーから画像をドラッグ&ドロップしてください');
-    }
-    
-    addVideoLayer() {
-        alert('素材エクスプローラーから動画をドラッグ&ドロップしてください');
-    }
-    
-    addAudioLayer() {
-        const input = document.getElementById('fileInput');
-        input.accept = 'audio/*';
-        input.click();
-    }
-    
-    addTextLayer() {
-        alert('テキストレイヤー機能は開発中です');
     }
 }
 
