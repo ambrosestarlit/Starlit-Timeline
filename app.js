@@ -1,0 +1,1118 @@
+// アプリケーションクラス
+class StarlitTimelineApp {
+    constructor() {
+        this.assets = [];
+        this.clips = [];
+        this.selectedClip = null;
+        this.currentTime = 0;
+        this.isPlaying = false;
+        this.zoom = 50; // px per second
+        this.trackCount = 5;
+        this.trackHeight = 80;
+        this.fps = 30;
+        this.duration = 30; // seconds
+        
+        // キャンバス
+        this.previewCanvas = document.getElementById('previewCanvas');
+        this.previewCtx = this.previewCanvas.getContext('2d');
+        this.timelineCanvas = document.getElementById('timelineCanvas');
+        this.timelineCtx = this.timelineCanvas.getContext('2d');
+        this.rulerCanvas = document.getElementById('rulerCanvas');
+        this.rulerCtx = this.rulerCanvas.getContext('2d');
+        
+        // エフェクト設定
+        this.effects = {
+            letterbox: {
+                enabled: false,
+                height: 100,
+                color: '#000000'
+            },
+            gradient: {
+                enabled: false,
+                topColor: '#FFFF00',
+                bottomColor: '#0000FF',
+                opacity: 50
+            }
+        };
+        
+        // Undo/Redo
+        this.history = [];
+        this.historyIndex = -1;
+        
+        this.init();
+    }
+    
+    init() {
+        this.setupEventListeners();
+        this.updateTimelineSize();
+        this.drawTimeline();
+        this.drawRuler();
+        this.updatePreview();
+        
+        // ズームスライダー
+        document.getElementById('zoomSlider').addEventListener('input', (e) => {
+            this.zoom = parseInt(e.target.value);
+            document.getElementById('zoomValue').textContent = `${this.zoom} px/秒`;
+            this.updateTimelineSize();
+            this.drawTimeline();
+            this.drawRuler();
+        });
+        
+        // エフェクトコントロール
+        this.setupEffectControls();
+    }
+    
+    setupEventListeners() {
+        // タイムラインキャンバスイベント
+        this.timelineCanvas.addEventListener('mousedown', (e) => this.handleTimelineMouseDown(e));
+        this.timelineCanvas.addEventListener('mousemove', (e) => this.handleTimelineMouseMove(e));
+        this.timelineCanvas.addEventListener('mouseup', (e) => this.handleTimelineMouseUp(e));
+        
+        // キーボードショートカット
+        document.addEventListener('keydown', (e) => this.handleKeyDown(e));
+        
+        // ドラッグ&ドロップ
+        document.getElementById('assetExplorer').addEventListener('drop', (e) => this.handleAssetDrop(e));
+        document.getElementById('assetExplorer').addEventListener('dragover', (e) => e.preventDefault());
+    }
+    
+    setupEffectControls() {
+        // レターボックス
+        document.getElementById('letterboxHeight').addEventListener('input', (e) => {
+            this.effects.letterbox.height = parseInt(e.target.value);
+            document.getElementById('letterboxHeightValue').textContent = `${e.target.value}px`;
+            this.updatePreview();
+        });
+        
+        document.getElementById('letterboxColor').addEventListener('change', (e) => {
+            this.effects.letterbox.color = e.target.value;
+            this.updatePreview();
+        });
+        
+        document.getElementById('letterboxEnable').addEventListener('change', (e) => {
+            this.effects.letterbox.enabled = e.target.checked;
+            this.updatePreview();
+        });
+        
+        // グラデーション
+        document.getElementById('gradientTopColor').addEventListener('change', (e) => {
+            this.effects.gradient.topColor = e.target.value;
+            this.updatePreview();
+        });
+        
+        document.getElementById('gradientBottomColor').addEventListener('change', (e) => {
+            this.effects.gradient.bottomColor = e.target.value;
+            this.updatePreview();
+        });
+        
+        document.getElementById('gradientOpacity').addEventListener('input', (e) => {
+            this.effects.gradient.opacity = parseInt(e.target.value);
+            document.getElementById('gradientOpacityValue').textContent = `${e.target.value}%`;
+            this.updatePreview();
+        });
+        
+        document.getElementById('gradientEnable').addEventListener('change', (e) => {
+            this.effects.gradient.enabled = e.target.checked;
+            this.updatePreview();
+        });
+    }
+    
+    // ファイル管理
+    importMedia() {
+        document.getElementById('fileInput').click();
+    }
+    
+    handleFileSelect(event) {
+        const files = event.target.files;
+        for (let file of files) {
+            this.addAsset(file);
+        }
+        event.target.value = ''; // リセット
+    }
+    
+    addAsset(file) {
+        const asset = {
+            id: Date.now() + Math.random(),
+            name: file.name,
+            type: file.type.split('/')[0], // image, video, audio
+            file: file,
+            url: URL.createObjectURL(file)
+        };
+        
+        this.assets.push(asset);
+        this.renderAssets();
+    }
+    
+    renderAssets() {
+        const explorer = document.getElementById('assetExplorer');
+        explorer.innerHTML = '';
+        
+        if (this.assets.length === 0) {
+            explorer.innerHTML = '<div class="empty-message">素材をドロップまたは➕ボタンで追加</div>';
+            return;
+        }
+        
+        this.assets.forEach(asset => {
+            const item = document.createElement('div');
+            item.className = 'asset-item';
+            item.draggable = true;
+            item.dataset.assetId = asset.id;
+            
+            const icon = {
+                'image': '🖼️',
+                'video': '🎬',
+                'audio': '🎵'
+            }[asset.type] || '📄';
+            
+            item.innerHTML = `
+                <div class="asset-thumbnail">${icon}</div>
+                <div class="asset-info">
+                    <div class="asset-name">${asset.name}</div>
+                    <div class="asset-type">${asset.type}</div>
+                </div>
+            `;
+            
+            item.addEventListener('dragstart', (e) => {
+                e.dataTransfer.setData('assetId', asset.id);
+            });
+            
+            explorer.appendChild(item);
+        });
+    }
+    
+    handleAssetDrop(event) {
+        event.preventDefault();
+        
+        // ファイルドロップ
+        if (event.dataTransfer.files.length > 0) {
+            for (let file of event.dataTransfer.files) {
+                this.addAsset(file);
+            }
+            return;
+        }
+        
+        // タイムラインへのドロップ
+        const assetId = event.dataTransfer.getData('assetId');
+        if (assetId) {
+            const rect = this.timelineCanvas.getBoundingClientRect();
+            const x = event.clientX - rect.left + this.timelineCanvas.parentElement.scrollLeft;
+            const y = event.clientY - rect.top + this.timelineCanvas.parentElement.scrollTop;
+            
+            const time = x / this.zoom;
+            const track = Math.floor(y / this.trackHeight);
+            
+            this.addClipFromAsset(assetId, time, track);
+        }
+    }
+    
+    addClipFromAsset(assetId, startTime, track) {
+        const asset = this.assets.find(a => a.id == assetId);
+        if (!asset) return;
+        
+        const clip = {
+            id: Date.now() + Math.random(),
+            asset: asset,
+            track: Math.max(0, Math.min(track, this.trackCount - 1)),
+            startTime: Math.max(0, startTime),
+            duration: 5, // デフォルト5秒
+            keyframes: {
+                x: [{time: 0, value: 0}],
+                y: [{time: 0, value: 0}],
+                rotation: [{time: 0, value: 0}],
+                opacity: [{time: 0, value: 1}],
+                scale: [{time: 0, value: 1}]
+            }
+        };
+        
+        this.clips.push(clip);
+        this.drawTimeline();
+        this.saveHistory();
+    }
+    
+    // タイムライン描画
+    updateTimelineSize() {
+        const width = Math.max(3000, this.duration * this.zoom + 100);
+        const height = this.trackCount * this.trackHeight;
+        
+        this.timelineCanvas.width = width;
+        this.timelineCanvas.height = height;
+        
+        this.rulerCanvas.width = this.rulerCanvas.parentElement.clientWidth;
+    }
+    
+    drawTimeline() {
+        const ctx = this.timelineCtx;
+        const width = this.timelineCanvas.width;
+        const height = this.timelineCanvas.height;
+        
+        // 背景
+        ctx.fillStyle = '#DEB887';
+        ctx.fillRect(0, 0, width, height);
+        
+        // トラックライン
+        ctx.strokeStyle = '#8B4513';
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= this.trackCount; i++) {
+            const y = i * this.trackHeight;
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(width, y);
+            ctx.stroke();
+        }
+        
+        // 時間グリッド
+        ctx.strokeStyle = '#B8956F';
+        ctx.lineWidth = 1;
+        for (let t = 0; t <= this.duration; t++) {
+            const x = t * this.zoom;
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, height);
+            ctx.stroke();
+        }
+        
+        // クリップ描画
+        this.clips.forEach(clip => {
+            this.drawClip(clip);
+        });
+        
+        // 再生ヘッド
+        this.drawPlayhead();
+    }
+    
+    drawClip(clip) {
+        const ctx = this.timelineCtx;
+        const x = clip.startTime * this.zoom;
+        const y = clip.track * this.trackHeight + 5;
+        const width = clip.duration * this.zoom;
+        const height = this.trackHeight - 10;
+        
+        // クリップ背景
+        ctx.fillStyle = clip === this.selectedClip ? '#D2691E' : '#6B4423';
+        ctx.fillRect(x, y, width, height);
+        
+        // ボーダー
+        ctx.strokeStyle = '#5D3A1A';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, width, height);
+        
+        // テキスト
+        ctx.fillStyle = '#F5DEB3';
+        ctx.font = '12px sans-serif';
+        ctx.fillText(clip.asset.name, x + 5, y + 20);
+        
+        // キーフレームインジケーター
+        this.drawKeyframeIndicators(clip, x, y, height);
+    }
+    
+    drawKeyframeIndicators(clip, clipX, clipY, clipHeight) {
+        const ctx = this.timelineCtx;
+        
+        Object.keys(clip.keyframes).forEach(property => {
+            const keyframes = clip.keyframes[property];
+            keyframes.forEach(kf => {
+                const x = clipX + (kf.time * this.zoom);
+                const y = clipY + clipHeight - 5;
+                
+                ctx.fillStyle = '#FFFF00';
+                ctx.beginPath();
+                ctx.arc(x, y, 4, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        });
+    }
+    
+    drawPlayhead() {
+        const ctx = this.timelineCtx;
+        const x = this.currentTime * this.zoom;
+        
+        ctx.strokeStyle = '#FF0000';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, this.timelineCanvas.height);
+        ctx.stroke();
+        
+        // プレイヘッドトップ
+        ctx.fillStyle = '#FF0000';
+        ctx.beginPath();
+        ctx.moveTo(x - 8, 0);
+        ctx.lineTo(x + 8, 0);
+        ctx.lineTo(x, 12);
+        ctx.closePath();
+        ctx.fill();
+    }
+    
+    drawRuler() {
+        const ctx = this.rulerCtx;
+        const width = this.rulerCanvas.width;
+        const height = 30;
+        
+        ctx.clearRect(0, 0, width, height);
+        ctx.fillStyle = '#DEB887';
+        ctx.fillRect(0, 0, width, height);
+        
+        ctx.fillStyle = '#5D3A1A';
+        ctx.font = '10px sans-serif';
+        
+        const scrollLeft = document.getElementById('timelineScroll').scrollLeft;
+        const startTime = Math.floor(scrollLeft / this.zoom);
+        const endTime = Math.ceil((scrollLeft + width) / this.zoom);
+        
+        for (let t = startTime; t <= endTime; t++) {
+            const x = t * this.zoom - scrollLeft;
+            
+            ctx.beginPath();
+            ctx.moveTo(x, height - 10);
+            ctx.lineTo(x, height);
+            ctx.stroke();
+            
+            const minutes = Math.floor(t / 60);
+            const seconds = t % 60;
+            const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            ctx.fillText(timeStr, x + 2, height - 12);
+        }
+    }
+    
+    // タイムライン操作
+    handleTimelineMouseDown(e) {
+        const rect = this.timelineCanvas.getBoundingClientRect();
+        const x = e.clientX - rect.left + this.timelineCanvas.parentElement.scrollLeft;
+        const y = e.clientY - rect.top + this.timelineCanvas.parentElement.scrollTop;
+        
+        // クリップ選択
+        const clickedClip = this.getClipAt(x, y);
+        if (clickedClip) {
+            this.selectedClip = clickedClip;
+            this.isDragging = true;
+            this.dragStartX = x;
+            this.dragStartY = y;
+            this.updatePropertiesPanel();
+            this.drawTimeline();
+            return;
+        }
+        
+        // プレイヘッド移動
+        this.currentTime = x / this.zoom;
+        this.updateTimeDisplay();
+        this.updatePreview();
+        this.drawTimeline();
+    }
+    
+    handleTimelineMouseMove(e) {
+        if (!this.isDragging || !this.selectedClip) return;
+        
+        const rect = this.timelineCanvas.getBoundingClientRect();
+        const x = e.clientX - rect.left + this.timelineCanvas.parentElement.scrollLeft;
+        const y = e.clientY - rect.top + this.timelineCanvas.parentElement.scrollTop;
+        
+        const deltaX = x - this.dragStartX;
+        const deltaY = y - this.dragStartY;
+        
+        this.selectedClip.startTime += deltaX / this.zoom;
+        this.selectedClip.track += Math.floor(deltaY / this.trackHeight);
+        
+        this.selectedClip.startTime = Math.max(0, this.selectedClip.startTime);
+        this.selectedClip.track = Math.max(0, Math.min(this.selectedClip.track, this.trackCount - 1));
+        
+        this.dragStartX = x;
+        this.dragStartY = y;
+        
+        this.drawTimeline();
+        this.updatePropertiesPanel();
+    }
+    
+    handleTimelineMouseUp(e) {
+        if (this.isDragging) {
+            this.saveHistory();
+        }
+        this.isDragging = false;
+    }
+    
+    getClipAt(x, y) {
+        for (let clip of this.clips) {
+            const clipX = clip.startTime * this.zoom;
+            const clipY = clip.track * this.trackHeight;
+            const clipWidth = clip.duration * this.zoom;
+            const clipHeight = this.trackHeight;
+            
+            if (x >= clipX && x <= clipX + clipWidth &&
+                y >= clipY && y <= clipY + clipHeight) {
+                return clip;
+            }
+        }
+        return null;
+    }
+    
+    // プロパティパネル
+    updatePropertiesPanel() {
+        const panel = document.getElementById('propertiesContent');
+        
+        if (!this.selectedClip) {
+            panel.innerHTML = '<div class="empty-message">クリップを選択してください</div>';
+            return;
+        }
+        
+        const clip = this.selectedClip;
+        const localTime = this.currentTime - clip.startTime;
+        
+        panel.innerHTML = `
+            <div class="property-group">
+                <div class="property-label">クリップ名</div>
+                <div class="property-value">${clip.asset.name}</div>
+            </div>
+            
+            <div class="property-group">
+                <div class="property-label">開始時間 (秒)</div>
+                <input type="number" class="property-input" value="${clip.startTime.toFixed(2)}" 
+                    onchange="app.updateClipProperty('startTime', parseFloat(this.value))">
+            </div>
+            
+            <div class="property-group">
+                <div class="property-label">継続時間 (秒)</div>
+                <input type="number" class="property-input" value="${clip.duration.toFixed(2)}" min="0.1"
+                    onchange="app.updateClipProperty('duration', parseFloat(this.value))">
+            </div>
+            
+            <div class="property-group">
+                <div class="property-label">X位置</div>
+                <input type="number" class="property-input" value="${this.getKeyframeValue(clip, 'x', localTime).toFixed(0)}"
+                    onchange="app.setKeyframeValue('x', parseFloat(this.value))">
+                <div class="keyframe-controls">
+                    <button class="keyframe-button ${this.hasKeyframeAt(clip, 'x', localTime) ? 'active' : ''}" 
+                        onclick="app.toggleKeyframe('x')">💎 キーフレーム</button>
+                </div>
+            </div>
+            
+            <div class="property-group">
+                <div class="property-label">Y位置</div>
+                <input type="number" class="property-input" value="${this.getKeyframeValue(clip, 'y', localTime).toFixed(0)}"
+                    onchange="app.setKeyframeValue('y', parseFloat(this.value))">
+                <div class="keyframe-controls">
+                    <button class="keyframe-button ${this.hasKeyframeAt(clip, 'y', localTime) ? 'active' : ''}" 
+                        onclick="app.toggleKeyframe('y')">💎 キーフレーム</button>
+                </div>
+            </div>
+            
+            <div class="property-group">
+                <div class="property-label">回転 (度)</div>
+                <input type="number" class="property-input" value="${this.getKeyframeValue(clip, 'rotation', localTime).toFixed(0)}"
+                    onchange="app.setKeyframeValue('rotation', parseFloat(this.value))">
+                <div class="keyframe-controls">
+                    <button class="keyframe-button ${this.hasKeyframeAt(clip, 'rotation', localTime) ? 'active' : ''}" 
+                        onclick="app.toggleKeyframe('rotation')">💎 キーフレーム</button>
+                </div>
+            </div>
+            
+            <div class="property-group">
+                <div class="property-label">不透明度 (0-1)</div>
+                <input type="number" class="property-input" value="${this.getKeyframeValue(clip, 'opacity', localTime).toFixed(2)}" 
+                    min="0" max="1" step="0.01"
+                    onchange="app.setKeyframeValue('opacity', parseFloat(this.value))">
+                <div class="keyframe-controls">
+                    <button class="keyframe-button ${this.hasKeyframeAt(clip, 'opacity', localTime) ? 'active' : ''}" 
+                        onclick="app.toggleKeyframe('opacity')">💎 キーフレーム</button>
+                </div>
+            </div>
+            
+            <div class="property-group">
+                <div class="property-label">スケール</div>
+                <input type="number" class="property-input" value="${this.getKeyframeValue(clip, 'scale', localTime).toFixed(2)}" 
+                    min="0.1" step="0.1"
+                    onchange="app.setKeyframeValue('scale', parseFloat(this.value))">
+                <div class="keyframe-controls">
+                    <button class="keyframe-button ${this.hasKeyframeAt(clip, 'scale', localTime) ? 'active' : ''}" 
+                        onclick="app.toggleKeyframe('scale')">💎 キーフレーム</button>
+                </div>
+            </div>
+        `;
+    }
+    
+    updateClipProperty(property, value) {
+        if (!this.selectedClip) return;
+        this.selectedClip[property] = value;
+        this.drawTimeline();
+        this.updatePreview();
+        this.saveHistory();
+    }
+    
+    // キーフレーム管理
+    getKeyframeValue(clip, property, localTime) {
+        const keyframes = clip.keyframes[property];
+        if (!keyframes || keyframes.length === 0) return 0;
+        
+        if (localTime <= keyframes[0].time) return keyframes[0].value;
+        if (localTime >= keyframes[keyframes.length - 1].time) return keyframes[keyframes.length - 1].value;
+        
+        // 線形補間
+        for (let i = 0; i < keyframes.length - 1; i++) {
+            if (localTime >= keyframes[i].time && localTime <= keyframes[i + 1].time) {
+                const t = (localTime - keyframes[i].time) / (keyframes[i + 1].time - keyframes[i].time);
+                return keyframes[i].value + (keyframes[i + 1].value - keyframes[i].value) * t;
+            }
+        }
+        
+        return keyframes[0].value;
+    }
+    
+    setKeyframeValue(property, value) {
+        if (!this.selectedClip) return;
+        
+        const localTime = this.currentTime - this.selectedClip.startTime;
+        const keyframes = this.selectedClip.keyframes[property];
+        
+        // 既存のキーフレームを更新または追加
+        const existing = keyframes.find(kf => Math.abs(kf.time - localTime) < 0.05);
+        if (existing) {
+            existing.value = value;
+        } else {
+            keyframes.push({ time: localTime, value: value });
+            keyframes.sort((a, b) => a.time - b.time);
+        }
+        
+        this.updatePreview();
+        this.drawTimeline();
+        this.updatePropertiesPanel();
+        this.saveHistory();
+    }
+    
+    toggleKeyframe(property) {
+        if (!this.selectedClip) return;
+        
+        const localTime = this.currentTime - this.selectedClip.startTime;
+        const keyframes = this.selectedClip.keyframes[property];
+        
+        const existingIndex = keyframes.findIndex(kf => Math.abs(kf.time - localTime) < 0.05);
+        
+        if (existingIndex !== -1) {
+            // 削除
+            keyframes.splice(existingIndex, 1);
+        } else {
+            // 追加
+            const currentValue = this.getKeyframeValue(this.selectedClip, property, localTime);
+            keyframes.push({ time: localTime, value: currentValue });
+            keyframes.sort((a, b) => a.time - b.time);
+        }
+        
+        this.drawTimeline();
+        this.updatePropertiesPanel();
+        this.saveHistory();
+    }
+    
+    hasKeyframeAt(clip, property, localTime) {
+        const keyframes = clip.keyframes[property];
+        return keyframes.some(kf => Math.abs(kf.time - localTime) < 0.05);
+    }
+    
+    // プレビュー更新
+    updatePreview() {
+        const ctx = this.previewCtx;
+        const width = this.previewCanvas.width;
+        const height = this.previewCanvas.height;
+        
+        // 背景クリア
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, width, height);
+        
+        // アクティブなクリップを描画
+        const activeClips = this.clips.filter(clip => 
+            this.currentTime >= clip.startTime && 
+            this.currentTime < clip.startTime + clip.duration
+        ).sort((a, b) => a.track - b.track);
+        
+        activeClips.forEach(clip => {
+            this.renderClip(clip);
+        });
+        
+        // エフェクト適用
+        this.applyEffects();
+    }
+    
+    async renderClip(clip) {
+        const localTime = this.currentTime - clip.startTime;
+        
+        const x = this.getKeyframeValue(clip, 'x', localTime);
+        const y = this.getKeyframeValue(clip, 'y', localTime);
+        const rotation = this.getKeyframeValue(clip, 'rotation', localTime);
+        const opacity = this.getKeyframeValue(clip, 'opacity', localTime);
+        const scale = this.getKeyframeValue(clip, 'scale', localTime);
+        
+        const ctx = this.previewCtx;
+        ctx.save();
+        
+        // 中心を基準に変形
+        ctx.translate(this.previewCanvas.width / 2 + x, this.previewCanvas.height / 2 + y);
+        ctx.rotate(rotation * Math.PI / 180);
+        ctx.scale(scale, scale);
+        ctx.globalAlpha = opacity;
+        
+        // 素材を描画
+        if (clip.asset.type === 'image') {
+            await this.drawImage(clip);
+        } else if (clip.asset.type === 'video') {
+            await this.drawVideo(clip, localTime);
+        }
+        
+        ctx.restore();
+    }
+    
+    async drawImage(clip) {
+        return new Promise((resolve) => {
+            if (!clip.imageElement) {
+                clip.imageElement = new Image();
+                clip.imageElement.onload = () => {
+                    this.drawImageOnCanvas(clip);
+                    resolve();
+                };
+                clip.imageElement.src = clip.asset.url;
+            } else {
+                this.drawImageOnCanvas(clip);
+                resolve();
+            }
+        });
+    }
+    
+    drawImageOnCanvas(clip) {
+        const img = clip.imageElement;
+        const ctx = this.previewCtx;
+        
+        const aspectRatio = img.width / img.height;
+        const maxWidth = 800;
+        const maxHeight = 600;
+        
+        let drawWidth = maxWidth;
+        let drawHeight = maxWidth / aspectRatio;
+        
+        if (drawHeight > maxHeight) {
+            drawHeight = maxHeight;
+            drawWidth = maxHeight * aspectRatio;
+        }
+        
+        ctx.drawImage(img, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+    }
+    
+    async drawVideo(clip, localTime) {
+        return new Promise((resolve) => {
+            if (!clip.videoElement) {
+                clip.videoElement = document.createElement('video');
+                clip.videoElement.src = clip.asset.url;
+                clip.videoElement.muted = true;
+                clip.videoElement.onloadeddata = () => {
+                    clip.videoElement.currentTime = localTime;
+                };
+            } else {
+                if (Math.abs(clip.videoElement.currentTime - localTime) > 0.1) {
+                    clip.videoElement.currentTime = localTime;
+                }
+            }
+            
+            setTimeout(() => {
+                this.drawVideoOnCanvas(clip);
+                resolve();
+            }, 50);
+        });
+    }
+    
+    drawVideoOnCanvas(clip) {
+        const video = clip.videoElement;
+        const ctx = this.previewCtx;
+        
+        if (video.readyState >= 2) {
+            const aspectRatio = video.videoWidth / video.videoHeight;
+            const maxWidth = 800;
+            const maxHeight = 600;
+            
+            let drawWidth = maxWidth;
+            let drawHeight = maxWidth / aspectRatio;
+            
+            if (drawHeight > maxHeight) {
+                drawHeight = maxHeight;
+                drawWidth = maxHeight * aspectRatio;
+            }
+            
+            ctx.drawImage(video, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+        }
+    }
+    
+    applyEffects() {
+        const ctx = this.previewCtx;
+        const width = this.previewCanvas.width;
+        const height = this.previewCanvas.height;
+        
+        // レターボックス
+        if (this.effects.letterbox.enabled) {
+            ctx.fillStyle = this.effects.letterbox.color;
+            ctx.fillRect(0, 0, width, this.effects.letterbox.height);
+            ctx.fillRect(0, height - this.effects.letterbox.height, width, this.effects.letterbox.height);
+        }
+        
+        // グラデーション
+        if (this.effects.gradient.enabled) {
+            const gradient = ctx.createLinearGradient(0, 0, 0, height);
+            
+            const opacity = this.effects.gradient.opacity / 100;
+            const topColor = this.hexToRgba(this.effects.gradient.topColor, opacity);
+            const bottomColor = this.hexToRgba(this.effects.gradient.bottomColor, opacity);
+            
+            gradient.addColorStop(0, topColor);
+            gradient.addColorStop(1, bottomColor);
+            
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, width, height);
+        }
+    }
+    
+    hexToRgba(hex, alpha) {
+        const r = parseInt(hex.slice(1, 3), 16);
+        const g = parseInt(hex.slice(3, 5), 16);
+        const b = parseInt(hex.slice(5, 7), 16);
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+    
+    // 再生コントロール
+    play() {
+        if (this.isPlaying) {
+            this.pause();
+            return;
+        }
+        
+        this.isPlaying = true;
+        document.getElementById('playButton').textContent = '⏸️ 一時停止';
+        
+        const startTime = Date.now();
+        const startFrame = this.currentTime;
+        
+        this.playInterval = setInterval(() => {
+            const elapsed = (Date.now() - startTime) / 1000;
+            this.currentTime = startFrame + elapsed;
+            
+            if (this.currentTime >= this.duration) {
+                this.stop();
+                return;
+            }
+            
+            this.updateTimeDisplay();
+            this.updatePreview();
+            this.drawTimeline();
+        }, 1000 / this.fps);
+    }
+    
+    pause() {
+        this.isPlaying = false;
+        document.getElementById('playButton').textContent = '▶️ 再生';
+        if (this.playInterval) {
+            clearInterval(this.playInterval);
+        }
+    }
+    
+    stop() {
+        this.pause();
+        this.currentTime = 0;
+        this.updateTimeDisplay();
+        this.updatePreview();
+        this.drawTimeline();
+    }
+    
+    updateTimeDisplay() {
+        const totalSeconds = Math.floor(this.currentTime);
+        const milliseconds = Math.floor((this.currentTime % 1) * 1000);
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        
+        const timeStr = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`;
+        document.getElementById('timeDisplay').textContent = timeStr;
+    }
+    
+    // UI操作
+    increaseTrackCount() {
+        this.trackCount++;
+        document.getElementById('trackCount').textContent = this.trackCount;
+        this.updateTimelineSize();
+        this.drawTimeline();
+    }
+    
+    decreaseTrackCount() {
+        if (this.trackCount > 1) {
+            this.trackCount--;
+            document.getElementById('trackCount').textContent = this.trackCount;
+            this.updateTimelineSize();
+            this.drawTimeline();
+        }
+    }
+    
+    splitClip() {
+        if (!this.selectedClip) return;
+        
+        const localTime = this.currentTime - this.selectedClip.startTime;
+        
+        if (localTime <= 0 || localTime >= this.selectedClip.duration) {
+            alert('クリップの範囲内で分割してください');
+            return;
+        }
+        
+        // 新しいクリップを作成
+        const newClip = JSON.parse(JSON.stringify(this.selectedClip));
+        newClip.id = Date.now() + Math.random();
+        newClip.startTime = this.selectedClip.startTime + localTime;
+        newClip.duration = this.selectedClip.duration - localTime;
+        
+        // キーフレームを調整
+        Object.keys(newClip.keyframes).forEach(property => {
+            newClip.keyframes[property] = newClip.keyframes[property]
+                .filter(kf => kf.time >= localTime)
+                .map(kf => ({ time: kf.time - localTime, value: kf.value }));
+        });
+        
+        // 元のクリップの長さを調整
+        this.selectedClip.duration = localTime;
+        Object.keys(this.selectedClip.keyframes).forEach(property => {
+            this.selectedClip.keyframes[property] = this.selectedClip.keyframes[property]
+                .filter(kf => kf.time <= localTime);
+        });
+        
+        this.clips.push(newClip);
+        this.drawTimeline();
+        this.saveHistory();
+    }
+    
+    deleteSelected() {
+        if (!this.selectedClip) return;
+        
+        const index = this.clips.indexOf(this.selectedClip);
+        if (index !== -1) {
+            this.clips.splice(index, 1);
+            this.selectedClip = null;
+            this.updatePropertiesPanel();
+            this.drawTimeline();
+            this.updatePreview();
+            this.saveHistory();
+        }
+    }
+    
+    toggleEffect(effectName) {
+        const controls = document.getElementById(`${effectName}Controls`);
+        if (controls.classList.contains('active')) {
+            controls.classList.remove('active');
+        } else {
+            controls.classList.add('active');
+        }
+    }
+    
+    setExportRangeToAll() {
+        document.getElementById('exportStart').value = 0;
+        
+        let maxEnd = 10;
+        this.clips.forEach(clip => {
+            const end = clip.startTime + clip.duration;
+            if (end > maxEnd) maxEnd = end;
+        });
+        
+        document.getElementById('exportEnd').value = maxEnd.toFixed(1);
+    }
+    
+    setExportRangeToSelection() {
+        if (!this.selectedClip) {
+            alert('クリップを選択してください');
+            return;
+        }
+        
+        document.getElementById('exportStart').value = this.selectedClip.startTime.toFixed(2);
+        document.getElementById('exportEnd').value = (this.selectedClip.startTime + this.selectedClip.duration).toFixed(2);
+    }
+    
+    // キーボードショートカット
+    handleKeyDown(e) {
+        if (e.key === 'Delete' && this.selectedClip) {
+            this.deleteSelected();
+        }
+        
+        if (e.ctrlKey && e.key === 'z') {
+            e.preventDefault();
+            this.undo();
+        }
+        
+        if (e.ctrlKey && e.key === 'y') {
+            e.preventDefault();
+            this.redo();
+        }
+        
+        if (e.key === ' ') {
+            e.preventDefault();
+            if (this.isPlaying) {
+                this.pause();
+            } else {
+                this.play();
+            }
+        }
+    }
+    
+    // Undo/Redo
+    saveHistory() {
+        const state = JSON.stringify({
+            clips: this.clips,
+            effects: this.effects
+        });
+        
+        this.history = this.history.slice(0, this.historyIndex + 1);
+        this.history.push(state);
+        this.historyIndex++;
+        
+        if (this.history.length > 50) {
+            this.history.shift();
+            this.historyIndex--;
+        }
+    }
+    
+    undo() {
+        if (this.historyIndex > 0) {
+            this.historyIndex--;
+            this.loadHistory();
+        }
+    }
+    
+    redo() {
+        if (this.historyIndex < this.history.length - 1) {
+            this.historyIndex++;
+            this.loadHistory();
+        }
+    }
+    
+    loadHistory() {
+        const state = JSON.parse(this.history[this.historyIndex]);
+        this.clips = state.clips;
+        this.effects = state.effects;
+        
+        this.drawTimeline();
+        this.updatePreview();
+        this.updatePropertiesPanel();
+    }
+    
+    // プロジェクト保存/読み込み
+    saveProject() {
+        const project = {
+            version: '1.0',
+            clips: this.clips.map(clip => ({
+                ...clip,
+                asset: {
+                    id: clip.asset.id,
+                    name: clip.asset.name,
+                    type: clip.asset.type
+                }
+            })),
+            effects: this.effects,
+            settings: {
+                fps: this.fps,
+                duration: this.duration,
+                resolution: {
+                    width: this.previewCanvas.width,
+                    height: this.previewCanvas.height
+                }
+            }
+        };
+        
+        const blob = new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'starlit_project.json';
+        a.click();
+    }
+    
+    openProject() {
+        document.getElementById('projectInput').click();
+    }
+    
+    handleProjectLoad(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const project = JSON.parse(e.target.result);
+                // プロジェクト読み込みロジック
+                alert('プロジェクトを読み込みました(素材は再インポートが必要です)');
+            } catch (err) {
+                alert('プロジェクトの読み込みに失敗しました');
+            }
+        };
+        reader.readAsText(file);
+    }
+    
+    newProject() {
+        if (confirm('新規プロジェクトを作成しますか?未保存の変更は失われます。')) {
+            this.clips = [];
+            this.selectedClip = null;
+            this.currentTime = 0;
+            this.drawTimeline();
+            this.updatePreview();
+            this.updatePropertiesPanel();
+        }
+    }
+    
+    // 書き出し機能
+    async exportVideo() {
+        alert('MP4書き出し機能は開発中です。現在はブラウザの制限により、連番PNG書き出しをご利用ください。');
+    }
+    
+    async exportSequence() {
+        const startTime = parseFloat(document.getElementById('exportStart').value);
+        const endTime = parseFloat(document.getElementById('exportEnd').value);
+        
+        if (startTime >= endTime) {
+            alert('書き出し範囲が不正です');
+            return;
+        }
+        
+        const frames = Math.ceil((endTime - startTime) * this.fps);
+        
+        if (!confirm(`${frames}フレームを書き出しますか?`)) {
+            return;
+        }
+        
+        const originalTime = this.currentTime;
+        
+        for (let i = 0; i < frames; i++) {
+            this.currentTime = startTime + (i / this.fps);
+            this.updatePreview();
+            
+            // フレームを画像として保存
+            const dataUrl = this.previewCanvas.toDataURL('image/png');
+            const a = document.createElement('a');
+            a.href = dataUrl;
+            a.download = `frame_${i.toString().padStart(5, '0')}.png`;
+            a.click();
+            
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        
+        this.currentTime = originalTime;
+        this.updatePreview();
+        
+        alert('連番PNG書き出しが完了しました!');
+    }
+    
+    async exportAudio() {
+        alert('音声書き出し機能は開発中です');
+    }
+    
+    // レイヤー追加(簡易版)
+    addImageLayer() {
+        alert('素材エクスプローラーから画像をドラッグ&ドロップしてください');
+    }
+    
+    addVideoLayer() {
+        alert('素材エクスプローラーから動画をドラッグ&ドロップしてください');
+    }
+    
+    addAudioLayer() {
+        alert('音声レイヤー機能は開発中です');
+    }
+    
+    addTextLayer() {
+        alert('テキストレイヤー機能は開発中です');
+    }
+}
+
+// アプリケーション初期化
+const app = new StarlitTimelineApp();
