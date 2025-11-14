@@ -46,10 +46,10 @@ body {
 
 .menu-item {
     position: relative;
-    padding: 10px 18px;
+    padding: 12px 20px;
     cursor: pointer;
     color: var(--biscuit-light);
-    font-size: 16px;
+    font-size: 18px;
     font-family: 'YDWbananaslipplus', sans-serif;
 }
 
@@ -63,7 +63,7 @@ body {
     top: 100%;
     left: 0;
     background: var(--chocolate-main);
-    min-width: 220px;
+    min-width: 240px;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
     z-index: 1000;
     border-radius: 0 0 6px 6px;
@@ -74,10 +74,10 @@ body {
 }
 
 .submenu-item {
-    padding: 12px 18px;
+    padding: 14px 20px;
     cursor: pointer;
     color: var(--biscuit-light);
-    font-size: 15px;
+    font-size: 17px;
     font-family: 'YDWbananaslipplus', sans-serif;
 }
 
@@ -115,9 +115,9 @@ body {
     color: var(--biscuit-light);
     border: none;
     border-radius: 6px;
-    padding: 10px 18px;
+    padding: 12px 20px;
     cursor: pointer;
-    font-size: 15px;
+    font-size: 17px;
     font-family: 'YDWbananaslipplus', sans-serif;
     transition: background 0.2s;
 }
@@ -131,8 +131,8 @@ body {
 }
 
 .round-button.small {
-    padding: 6px 12px;
-    font-size: 14px;
+    padding: 8px 14px;
+    font-size: 16px;
 }
 
 /* アイコンボタン */
@@ -190,7 +190,7 @@ body {
 
 .sidebar-header {
     background: var(--chocolate-main);
-    padding: 12px;
+    padding: 14px;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -198,7 +198,7 @@ body {
 }
 
 .sidebar-header h3 {
-    font-size: 16px;
+    font-size: 18px;
     color: var(--biscuit-light);
     margin: 0;
     font-family: 'YDWbananaslipplus', sans-serif;
@@ -214,7 +214,7 @@ body {
     display: flex;
     align-items: center;
     gap: 4px;
-    font-size: 13px;
+    font-size: 15px;
     color: var(--biscuit-light);
     cursor: pointer;
     font-family: 'YDWbananaslipplus', sans-serif;
@@ -239,12 +239,12 @@ body {
 
 .filter-button {
     flex: 1;
-    padding: 8px 6px;
+    padding: 10px 8px;
     background: var(--chocolate-main);
     color: var(--biscuit-light);
     border: none;
     border-radius: 4px;
-    font-size: 13px;
+    font-size: 15px;
     font-family: 'YDWbananaslipplus', sans-serif;
     cursor: pointer;
     transition: all 0.2s;
@@ -382,7 +382,7 @@ body {
 }
 
 .timeline-title {
-    font-size: 16px;
+    font-size: 18px;
     color: var(--biscuit-light);
     font-family: 'YDWbananaslipplus', sans-serif;
 }
@@ -391,28 +391,28 @@ body {
     display: flex;
     gap: 8px;
     align-items: center;
-    font-size: 14px;
+    font-size: 16px;
     font-family: 'YDWbananaslipplus', sans-serif;
 }
 
 .time-input {
-    width: 70px;
-    padding: 5px;
+    width: 75px;
+    padding: 6px;
     border-radius: 4px;
     border: 1px solid var(--chocolate-dark);
     background: var(--biscuit-main);
     color: var(--chocolate-dark);
-    font-size: 14px;
+    font-size: 16px;
     font-family: 'YDWbananaslipplus', sans-serif;
 }
 
 .timeline-controls {
     background: var(--chocolate-dark);
-    padding: 10px;
+    padding: 12px;
     display: flex;
-    gap: 10px;
+    gap: 12px;
     align-items: center;
-    font-size: 14px;
+    font-size: 16px;
     font-family: 'YDWbananaslipplus', sans-serif;
 }
 
@@ -425,10 +425,10 @@ body {
 }
 
 .track-count {
-    min-width: 24px;
+    min-width: 28px;
     text-align: center;
     color: var(--biscuit-light);
-    font-size: 15px;
+    font-size: 17px;
     font-family: 'YDWbananaslipplus', sans-serif;
 }
 
@@ -520,9 +520,9 @@ body {
 
 #zoomValue {
     color: var(--biscuit-light);
-    min-width: 100px;
+    min-width: 110px;
     font-family: 'YDWbananaslipplus', sans-serif;
-    font-size: 14px;
+    font-size: 16px;
 }
 
 /* タイムライン定規 */
