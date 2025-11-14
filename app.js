@@ -534,13 +534,6 @@ class StarlitTimelineApp {
         const displayName = clip.asset.name.length > 20 ? clip.asset.name.substring(0, 20) + '...' : clip.asset.name;
         ctx.fillText(displayName, x + 25, y + 20);
         
-        // ループインジケーター
-        if ((clip.asset.type === 'video' || clip.asset.type === 'sequence') && clip.loopCount > 1) {
-            ctx.fillStyle = '#00FF00';
-            ctx.font = '10px sans-serif';
-            ctx.fillText(`×${clip.loopCount}`, x + 25, y + 35);
-        }
-        
         // トランジションインジケーター
         this.drawTransitionIndicators(clip, x, y, width, height);
         
@@ -830,96 +823,19 @@ class StarlitTimelineApp {
                     min="0.1" max="30" step="0.1"
                     oninput="app.updateClipProperty('duration', parseFloat(this.value)); document.getElementById('durationValue').textContent = this.value + '秒'">
             </div>
-            
-            <!-- トランジション設定 -->
-            <div class="property-section-header" onclick="app.togglePropertySection('transition')">
-                <span class="section-toggle-icon" id="transitionToggle">▼</span>
-                🎬 トランジション
-            </div>
-            <div class="property-section-content" id="transitionContent">
-                <div class="property-group">
-                    <div class="property-label">イン</div>
-                    <select class="property-input" onchange="app.updateTransition('in', 'type', this.value)">
-                        ${this.availableTransitions.map(t => 
-                            `<option value="${t.id}" ${clip.transitionIn.type === t.id ? 'selected' : ''}>${t.name}</option>`
-                        ).join('')}
-                    </select>
-                </div>
-                
-                <div class="property-group">
-                    <div class="property-label">イン時間: <span id="transInDurationValue">${clip.transitionIn.duration.toFixed(2)}秒</span></div>
-                    <input type="range" class="property-slider" value="${clip.transitionIn.duration.toFixed(2)}" 
-                        min="0.1" max="${clip.duration / 2}" step="0.1"
-                        oninput="app.updateTransition('in', 'duration', parseFloat(this.value)); document.getElementById('transInDurationValue').textContent = this.value + '秒'">
-                </div>
-                
-                <div class="property-group">
-                    <div class="property-label">アウト</div>
-                    <select class="property-input" onchange="app.updateTransition('out', 'type', this.value)">
-                        ${this.availableTransitions.map(t => 
-                            `<option value="${t.id}" ${clip.transitionOut.type === t.id ? 'selected' : ''}>${t.name}</option>`
-                        ).join('')}
-                    </select>
-                </div>
-                
-                <div class="property-group">
-                    <div class="property-label">アウト時間: <span id="transOutDurationValue">${clip.transitionOut.duration.toFixed(2)}秒</span></div>
-                    <input type="range" class="property-slider" value="${clip.transitionOut.duration.toFixed(2)}" 
-                        min="0.1" max="${clip.duration / 2}" step="0.1"
-                        oninput="app.updateTransition('out', 'duration', parseFloat(this.value)); document.getElementById('transOutDurationValue').textContent = this.value + '秒'">
-                </div>
-            </div>
         `;
         
-        // 音声クリップの場合はボリューム設定
-        if (clip.asset.type === 'audio' || clip.asset.type === 'video') {
+        // 連番アニメーションの場合はフレームレート設定
+        if (clip.asset.type === 'sequence') {
             propertiesHTML += `
-                <div class="property-section-header" onclick="app.togglePropertySection('audio')">
-                    <span class="section-toggle-icon" id="audioToggle">▼</span>
-                    🔊 音声
-                </div>
-                <div class="property-section-content" id="audioContent">
-                    <div class="property-group">
-                        <div class="property-label">音量: <span id="volumeValue">${(clip.volume * 100).toFixed(0)}%</span></div>
-                        <input type="range" class="property-slider" value="${(clip.volume * 100).toFixed(0)}" 
-                            min="0" max="100" step="1"
-                            oninput="app.updateClipProperty('volume', parseFloat(this.value) / 100); document.getElementById('volumeValue').textContent = this.value + '%'">
-                    </div>
+                <div class="property-group">
+                    <div class="property-label">フレームレート: <span id="frameRateValue">${clip.frameRate || 30} fps</span></div>
+                    <input type="range" class="property-slider" value="${clip.frameRate || 30}" 
+                        min="1" max="60" step="1"
+                        oninput="document.getElementById('frameRateValue').textContent = this.value + ' fps'"
+                        onchange="app.updateClipProperty('frameRate', parseInt(this.value))">
                 </div>
             `;
-        }
-        
-        // 動画・連番アニメーションの場合はループ設定
-        if (clip.asset.type === 'video' || clip.asset.type === 'sequence') {
-            propertiesHTML += `
-                <div class="property-section-header" onclick="app.togglePropertySection('loop')">
-                    <span class="section-toggle-icon" id="loopToggle">▼</span>
-                    🔁 ループ
-                </div>
-                <div class="property-section-content" id="loopContent">
-                    <div class="property-group">
-                        <div class="property-label">ループ回数: <span id="loopCountValue">${clip.loopCount}</span></div>
-                        <input type="range" class="property-slider" value="${clip.loopCount}" 
-                            min="1" max="10" step="1"
-                            oninput="document.getElementById('loopCountValue').textContent = this.value"
-                            onchange="app.updateClipProperty('loopCount', parseInt(this.value))">
-                    </div>
-            `;
-            
-            // 連番の場合はフレームレート設定
-            if (clip.asset.type === 'sequence') {
-                propertiesHTML += `
-                    <div class="property-group">
-                        <div class="property-label">フレームレート: <span id="frameRateValue">${clip.frameRate || 30} fps</span></div>
-                        <input type="range" class="property-slider" value="${clip.frameRate || 30}" 
-                            min="1" max="60" step="1"
-                            oninput="document.getElementById('frameRateValue').textContent = this.value + ' fps'"
-                            onchange="app.updateClipProperty('frameRate', parseInt(this.value))">
-                    </div>
-                `;
-            }
-            
-            propertiesHTML += `</div>`;
         }
         
         // 映像クリップの場合はトランスフォーム設定
@@ -1025,6 +941,65 @@ class StarlitTimelineApp {
                                 onchange="app.updateClipProperty('useOriginalSize', this.checked)">
                             原寸表示
                         </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        propertiesHTML += `
+            <!-- トランジション設定 -->
+            <div class="property-section-header" onclick="app.togglePropertySection('transition')">
+                <span class="section-toggle-icon" id="transitionToggle">▼</span>
+                🎬 トランジション
+            </div>
+            <div class="property-section-content" id="transitionContent">
+                <div class="property-group">
+                    <div class="property-label">イン</div>
+                    <select class="property-input" onchange="app.updateTransition('in', 'type', this.value)">
+                        ${this.availableTransitions.map(t => 
+                            `<option value="${t.id}" ${clip.transitionIn.type === t.id ? 'selected' : ''}>${t.name}</option>`
+                        ).join('')}
+                    </select>
+                </div>
+                
+                <div class="property-group">
+                    <div class="property-label">イン時間: <span id="transInDurationValue">${clip.transitionIn.duration.toFixed(2)}秒</span></div>
+                    <input type="range" class="property-slider" value="${clip.transitionIn.duration.toFixed(2)}" 
+                        min="0.1" max="${clip.duration / 2}" step="0.1"
+                        oninput="app.updateTransition('in', 'duration', parseFloat(this.value)); document.getElementById('transInDurationValue').textContent = this.value + '秒'">
+                </div>
+                
+                <div class="property-group">
+                    <div class="property-label">アウト</div>
+                    <select class="property-input" onchange="app.updateTransition('out', 'type', this.value)">
+                        ${this.availableTransitions.map(t => 
+                            `<option value="${t.id}" ${clip.transitionOut.type === t.id ? 'selected' : ''}>${t.name}</option>`
+                        ).join('')}
+                    </select>
+                </div>
+                
+                <div class="property-group">
+                    <div class="property-label">アウト時間: <span id="transOutDurationValue">${clip.transitionOut.duration.toFixed(2)}秒</span></div>
+                    <input type="range" class="property-slider" value="${clip.transitionOut.duration.toFixed(2)}" 
+                        min="0.1" max="${clip.duration / 2}" step="0.1"
+                        oninput="app.updateTransition('out', 'duration', parseFloat(this.value)); document.getElementById('transOutDurationValue').textContent = this.value + '秒'">
+                </div>
+            </div>
+        `;
+        
+        // 音声クリップの場合はボリューム設定
+        if (clip.asset.type === 'audio' || clip.asset.type === 'video') {
+            propertiesHTML += `
+                <div class="property-section-header" onclick="app.togglePropertySection('audio')">
+                    <span class="section-toggle-icon" id="audioToggle">▼</span>
+                    🔊 音声
+                </div>
+                <div class="property-section-content" id="audioContent">
+                    <div class="property-group">
+                        <div class="property-label">音量: <span id="volumeValue">${(clip.volume * 100).toFixed(0)}%</span></div>
+                        <input type="range" class="property-slider" value="${(clip.volume * 100).toFixed(0)}" 
+                            min="0" max="100" step="1"
+                            oninput="app.updateClipProperty('volume', parseFloat(this.value) / 100); document.getElementById('volumeValue').textContent = this.value + '%'">
                     </div>
                 </div>
             `;
@@ -1202,12 +1177,22 @@ class StarlitTimelineApp {
     async renderClip(clip) {
         const localTime = this.currentTime - clip.startTime;
         
-        // ループ処理
+        // ループ処理 - 継続時間内で素材を繰り返す
         let effectiveLocalTime = localTime;
-        if (clip.loopCount > 1 && (clip.asset.type === 'video' || clip.asset.type === 'sequence')) {
-            // ビデオまたは連番の実際の長さを計算
-            let actualDuration = clip.duration / clip.loopCount;
-            effectiveLocalTime = localTime % actualDuration;
+        if (clip.asset.type === 'video' || clip.asset.type === 'sequence') {
+            // 素材の実際の長さを取得
+            let originalDuration;
+            if (clip.asset.type === 'video' && clip.videoElement) {
+                originalDuration = clip.videoElement.duration || 1;
+            } else if (clip.asset.type === 'sequence') {
+                const frameRate = clip.frameRate || 30;
+                originalDuration = clip.asset.frameCount / frameRate;
+            } else {
+                originalDuration = clip.duration; // フォールバック
+            }
+            
+            // 継続時間内でループ
+            effectiveLocalTime = localTime % originalDuration;
         }
         
         // トランジション進行度を計算
