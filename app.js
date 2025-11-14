@@ -89,6 +89,9 @@ class StarlitTimelineApp {
     }
     
     init() {
+        // キャッシュから設定を復元
+        this.loadSettingsFromCache();
+        
         this.setupEventListeners();
         this.updateTimelineSize();
         this.drawTimeline();
@@ -106,6 +109,8 @@ class StarlitTimelineApp {
         
         // エフェクトコントロール
         this.setupEffectControls();
+        
+        console.log('✨ エフェクト設定を復元しました');
     }
     
     setupEventListeners() {
@@ -137,22 +142,26 @@ class StarlitTimelineApp {
         document.getElementById('letterboxHeight').addEventListener('input', (e) => {
             this.effects.letterbox.height = parseInt(e.target.value);
             document.getElementById('letterboxHeightValue').textContent = `${e.target.value}px`;
+            this.saveSettingsToCache();
             this.updatePreview();
         });
         
         document.getElementById('letterboxColor').addEventListener('change', (e) => {
             this.effects.letterbox.color = e.target.value;
+            this.saveSettingsToCache();
             this.updatePreview();
         });
         
         document.getElementById('letterboxEnable').addEventListener('change', (e) => {
             this.effects.letterbox.enabled = e.target.checked;
+            this.saveSettingsToCache();
             this.updatePreview();
         });
         
         // グラデーション - 有効/無効
         document.getElementById('gradientEnable').addEventListener('change', (e) => {
             this.effects.gradient.enabled = e.target.checked;
+            this.saveSettingsToCache();
             this.updatePreview();
         });
     }
@@ -175,6 +184,9 @@ class StarlitTimelineApp {
         
         // ブレンドモード
         this.effects.gradient.blendMode = document.getElementById('gradientBlendMode').value;
+        
+        // キャッシュに自動保存
+        this.saveSettingsToCache();
         
         this.updatePreview();
     }
@@ -1948,6 +1960,10 @@ class StarlitTimelineApp {
             effects: this.effects
         };
         
+        // キャッシュに保存（自動）
+        this.saveSettingsToCache();
+        
+        // ファイルとしても保存（バックアップ用）
         const blob = new Blob([JSON.stringify(settings, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -1962,7 +1978,7 @@ class StarlitTimelineApp {
         URL.revokeObjectURL(url);
         
         // 成功メッセージ
-        this.showNotification('💾 エフェクト設定を保存しました');
+        this.showNotification('💾 エフェクト設定を保存しました（ファイル + キャッシュ）');
     }
     
     loadEffectSettings() {
@@ -2054,6 +2070,42 @@ class StarlitTimelineApp {
             notification.classList.remove('show');
             setTimeout(() => notification.remove(), 300);
         }, 3000);
+    }
+    
+    // キャッシュ（localStorage）への保存・読込
+    saveSettingsToCache() {
+        try {
+            const settings = {
+                version: '1.0',
+                timestamp: new Date().toISOString(),
+                effects: this.effects
+            };
+            localStorage.setItem('starlitEffectSettings', JSON.stringify(settings));
+            console.log('💾 設定をキャッシュに保存しました');
+        } catch (error) {
+            console.error('キャッシュ保存エラー:', error);
+        }
+    }
+    
+    loadSettingsFromCache() {
+        try {
+            const cached = localStorage.getItem('starlitEffectSettings');
+            if (cached) {
+                const settings = JSON.parse(cached);
+                this.effects = settings.effects;
+                
+                // UIを更新（次のフレームで実行）
+                setTimeout(() => {
+                    this.updateEffectUI();
+                }, 0);
+                
+                console.log('✨ キャッシュから設定を復元しました');
+            } else {
+                console.log('ℹ️ キャッシュに保存された設定がありません（初回起動）');
+            }
+        } catch (error) {
+            console.error('キャッシュ読込エラー:', error);
+        }
     }
     
     // 書き出し機能
