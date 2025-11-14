@@ -936,67 +936,90 @@ class StarlitTimelineApp {
                     📐 トランスフォーム
                 </div>
                 <div class="property-section-content" id="transformContent">
-                    <div class="property-group">
-                        <div class="property-label">X位置: <span id="xValue">${currentX.toFixed(0)}px</span></div>
-                        <input type="range" class="property-slider" value="${currentX.toFixed(0)}"
-                            min="-960" max="960" step="1"
-                            oninput="document.getElementById('xValue').textContent = this.value + 'px'; app.setKeyframeValueLive('x', parseFloat(this.value))"
-                            onchange="app.setKeyframeValue('x', parseFloat(this.value))">
-                        <div class="keyframe-controls">
-                            <button class="keyframe-button ${this.hasKeyframeAt(clip, 'x', localTime) ? 'active' : ''}" 
-                                onclick="app.toggleKeyframe('x')">💎 キーフレーム</button>
+                    <!-- 位置 -->
+                    <div class="ae-property-group">
+                        <div class="ae-property-header" onclick="app.toggleAEProperty('position')">
+                            <span class="ae-property-icon" id="positionIcon">▶</span>
+                            <span class="ae-property-name">📍 位置</span>
+                            <button class="ae-keyframe-indicator ${this.hasKeyframeAt(clip, 'x', localTime) || this.hasKeyframeAt(clip, 'y', localTime) ? 'active' : ''}" 
+                                onclick="event.stopPropagation(); app.toggleKeyframe('x'); app.toggleKeyframe('y')">💎</button>
+                        </div>
+                        <div class="ae-property-content collapsed" id="positionContent">
+                            <div class="ae-subproperty">
+                                <label>X: <span id="xValue">${currentX.toFixed(0)}</span>px</label>
+                                <input type="range" class="property-slider" value="${currentX.toFixed(0)}"
+                                    min="-960" max="960" step="1"
+                                    oninput="document.getElementById('xValue').textContent = this.value; app.setKeyframeValueLive('x', parseFloat(this.value))"
+                                    onchange="app.setKeyframeValue('x', parseFloat(this.value))">
+                            </div>
+                            <div class="ae-subproperty">
+                                <label>Y: <span id="yValue">${currentY.toFixed(0)}</span>px</label>
+                                <input type="range" class="property-slider" value="${currentY.toFixed(0)}"
+                                    min="-540" max="540" step="1"
+                                    oninput="document.getElementById('yValue').textContent = this.value; app.setKeyframeValueLive('y', parseFloat(this.value))"
+                                    onchange="app.setKeyframeValue('y', parseFloat(this.value))">
+                            </div>
                         </div>
                     </div>
                     
-                    <div class="property-group">
-                        <div class="property-label">Y位置: <span id="yValue">${currentY.toFixed(0)}px</span></div>
-                        <input type="range" class="property-slider" value="${currentY.toFixed(0)}"
-                            min="-540" max="540" step="1"
-                            oninput="document.getElementById('yValue').textContent = this.value + 'px'; app.setKeyframeValueLive('y', parseFloat(this.value))"
-                            onchange="app.setKeyframeValue('y', parseFloat(this.value))">
-                        <div class="keyframe-controls">
-                            <button class="keyframe-button ${this.hasKeyframeAt(clip, 'y', localTime) ? 'active' : ''}" 
-                                onclick="app.toggleKeyframe('y')">💎 キーフレーム</button>
+                    <!-- スケール -->
+                    <div class="ae-property-group">
+                        <div class="ae-property-header" onclick="app.toggleAEProperty('scale')">
+                            <span class="ae-property-icon" id="scaleIcon">▶</span>
+                            <span class="ae-property-name">🔍 スケール</span>
+                            <span class="ae-property-value">${(currentScale * 100).toFixed(0)}%</span>
+                            <button class="ae-keyframe-indicator ${this.hasKeyframeAt(clip, 'scale', localTime) ? 'active' : ''}" 
+                                onclick="event.stopPropagation(); app.toggleKeyframe('scale')">💎</button>
+                        </div>
+                        <div class="ae-property-content collapsed" id="scaleContent">
+                            <div class="ae-subproperty">
+                                <input type="range" class="property-slider" value="${(currentScale * 100).toFixed(0)}" 
+                                    min="10" max="300" step="1" id="scaleSlider"
+                                    oninput="document.querySelector('#scaleContent').parentElement.querySelector('.ae-property-value').textContent = this.value + '%'; app.setKeyframeValueLive('scale', parseFloat(this.value) / 100)"
+                                    onchange="app.setKeyframeValue('scale', parseFloat(this.value) / 100)">
+                            </div>
                         </div>
                     </div>
                     
-                    <div class="property-group">
-                        <div class="property-label">回転: <span id="rotationValue">${currentRotation.toFixed(0)}°</span></div>
-                        <input type="range" class="property-slider" value="${currentRotation.toFixed(0)}"
-                            min="-180" max="180" step="1"
-                            oninput="document.getElementById('rotationValue').textContent = this.value + '°'; app.setKeyframeValueLive('rotation', parseFloat(this.value))"
-                            onchange="app.setKeyframeValue('rotation', parseFloat(this.value))">
-                        <div class="keyframe-controls">
-                            <button class="keyframe-button ${this.hasKeyframeAt(clip, 'rotation', localTime) ? 'active' : ''}" 
-                                onclick="app.toggleKeyframe('rotation')">💎 キーフレーム</button>
+                    <!-- 回転 -->
+                    <div class="ae-property-group">
+                        <div class="ae-property-header" onclick="app.toggleAEProperty('rotation')">
+                            <span class="ae-property-icon" id="rotationIcon">▶</span>
+                            <span class="ae-property-name">🔄 回転</span>
+                            <span class="ae-property-value">${currentRotation.toFixed(0)}°</span>
+                            <button class="ae-keyframe-indicator ${this.hasKeyframeAt(clip, 'rotation', localTime) ? 'active' : ''}" 
+                                onclick="event.stopPropagation(); app.toggleKeyframe('rotation')">💎</button>
+                        </div>
+                        <div class="ae-property-content collapsed" id="rotationContent">
+                            <div class="ae-subproperty">
+                                <input type="range" class="property-slider" value="${currentRotation.toFixed(0)}"
+                                    min="-180" max="180" step="1" id="rotationSlider"
+                                    oninput="document.querySelector('#rotationContent').parentElement.querySelector('.ae-property-value').textContent = this.value + '°'; app.setKeyframeValueLive('rotation', parseFloat(this.value))"
+                                    onchange="app.setKeyframeValue('rotation', parseFloat(this.value))">
+                            </div>
                         </div>
                     </div>
                     
-                    <div class="property-group">
-                        <div class="property-label">不透明度: <span id="opacityValue">${(currentOpacity * 100).toFixed(0)}%</span></div>
-                        <input type="range" class="property-slider" value="${(currentOpacity * 100).toFixed(0)}" 
-                            min="0" max="100" step="1"
-                            oninput="document.getElementById('opacityValue').textContent = this.value + '%'; app.setKeyframeValueLive('opacity', parseFloat(this.value) / 100)"
-                            onchange="app.setKeyframeValue('opacity', parseFloat(this.value) / 100)">
-                        <div class="keyframe-controls">
-                            <button class="keyframe-button ${this.hasKeyframeAt(clip, 'opacity', localTime) ? 'active' : ''}" 
-                                onclick="app.toggleKeyframe('opacity')">💎 キーフレーム</button>
+                    <!-- 不透明度 -->
+                    <div class="ae-property-group">
+                        <div class="ae-property-header" onclick="app.toggleAEProperty('opacity')">
+                            <span class="ae-property-icon" id="opacityIcon">▶</span>
+                            <span class="ae-property-name">👁️ 不透明度</span>
+                            <span class="ae-property-value">${(currentOpacity * 100).toFixed(0)}%</span>
+                            <button class="ae-keyframe-indicator ${this.hasKeyframeAt(clip, 'opacity', localTime) ? 'active' : ''}" 
+                                onclick="event.stopPropagation(); app.toggleKeyframe('opacity')">💎</button>
+                        </div>
+                        <div class="ae-property-content collapsed" id="opacityContent">
+                            <div class="ae-subproperty">
+                                <input type="range" class="property-slider" value="${(currentOpacity * 100).toFixed(0)}" 
+                                    min="0" max="100" step="1" id="opacitySlider"
+                                    oninput="document.querySelector('#opacityContent').parentElement.querySelector('.ae-property-value').textContent = this.value + '%'; app.setKeyframeValueLive('opacity', parseFloat(this.value) / 100)"
+                                    onchange="app.setKeyframeValue('opacity', parseFloat(this.value) / 100)">
+                            </div>
                         </div>
                     </div>
                     
-                    <div class="property-group">
-                        <div class="property-label">スケール: <span id="scaleValue">${(currentScale * 100).toFixed(0)}%</span></div>
-                        <input type="range" class="property-slider" value="${(currentScale * 100).toFixed(0)}" 
-                            min="10" max="300" step="1"
-                            oninput="document.getElementById('scaleValue').textContent = this.value + '%'; app.setKeyframeValueLive('scale', parseFloat(this.value) / 100)"
-                            onchange="app.setKeyframeValue('scale', parseFloat(this.value) / 100)">
-                        <div class="keyframe-controls">
-                            <button class="keyframe-button ${this.hasKeyframeAt(clip, 'scale', localTime) ? 'active' : ''}" 
-                                onclick="app.toggleKeyframe('scale')">💎 キーフレーム</button>
-                        </div>
-                    </div>
-                    
-                    <div class="property-group">
+                    <div class="property-group" style="margin-top: 10px;">
                         <div class="property-label">
                             <input type="checkbox" id="useOriginalSize" ${clip.useOriginalSize ? 'checked' : ''} 
                                 onchange="app.updateClipProperty('useOriginalSize', this.checked)">
@@ -1635,6 +1658,16 @@ class StarlitTimelineApp {
         if (content && toggle) {
             content.classList.toggle('collapsed');
             toggle.classList.toggle('collapsed');
+        }
+    }
+    
+    toggleAEProperty(propertyName) {
+        const content = document.getElementById(`${propertyName}Content`);
+        const icon = document.getElementById(`${propertyName}Icon`);
+        
+        if (content && icon) {
+            content.classList.toggle('collapsed');
+            icon.classList.toggle('expanded');
         }
     }
     

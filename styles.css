@@ -766,3 +766,100 @@ input[type="checkbox"] {
     cursor: pointer;
     accent-color: var(--accent-orange);
 }
+
+/* AE風プロパティグループ */
+.ae-property-group {
+    margin-bottom: 4px;
+}
+
+.ae-property-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    background: rgba(139, 69, 19, 0.3);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s;
+    font-size: 12px;
+}
+
+.ae-property-header:hover {
+    background: rgba(139, 69, 19, 0.5);
+}
+
+.ae-property-icon {
+    font-size: 10px;
+    transition: transform 0.2s;
+    width: 12px;
+    text-align: center;
+}
+
+.ae-property-icon.expanded {
+    transform: rotate(90deg);
+}
+
+.ae-property-name {
+    flex: 1;
+    color: var(--biscuit-light);
+    font-weight: 500;
+}
+
+.ae-property-value {
+    color: var(--biscuit-main);
+    font-size: 11px;
+    min-width: 50px;
+    text-align: right;
+    margin-right: 8px;
+}
+
+.ae-keyframe-indicator {
+    background: transparent;
+    border: none;
+    color: var(--biscuit-main);
+    font-size: 14px;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.ae-keyframe-indicator:hover {
+    background: rgba(210, 105, 30, 0.3);
+}
+
+.ae-keyframe-indicator.active {
+    color: var(--accent-orange);
+    transform: scale(1.2);
+}
+
+.ae-property-content {
+    max-height: 200px;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+    padding-left: 24px;
+    margin-top: 4px;
+}
+
+.ae-property-content.collapsed {
+    max-height: 0;
+    margin-top: 0;
+}
+
+.ae-subproperty {
+    margin-bottom: 8px;
+}
+
+.ae-subproperty label {
+    display: block;
+    font-size: 11px;
+    color: var(--biscuit-main);
+    margin-bottom: 4px;
+}
+
+.ae-subproperty label span {
+    color: var(--biscuit-light);
+    font-weight: bold;
+    min-width: 40px;
+    display: inline-block;
+}
