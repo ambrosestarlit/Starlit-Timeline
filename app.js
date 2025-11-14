@@ -303,10 +303,16 @@ class StarlitTimelineApp {
     }
     
     handleAssetDrop(event) {
+        console.log('=== handleAssetDrop 呼び出し ===');
+        console.log('isMovingClip:', this.isMovingClip);
+        console.log('files:', event.dataTransfer.files.length);
+        console.log('assetId:', event.dataTransfer.getData('assetId'));
+        
         event.preventDefault();
         
         // クリップ移動中の場合は何もしない
         if (this.isMovingClip) {
+            console.log('クリップ移動中のためスキップ');
             return;
         }
         
@@ -314,8 +320,11 @@ class StarlitTimelineApp {
         const targetIsTimeline = event.target.id === 'timelineCanvas' || 
                                  event.target.closest('#timelineScroll');
         
+        console.log('targetIsTimeline:', targetIsTimeline);
+        
         // ファイルドロップ (素材エクスプローラーへ)
         if (event.dataTransfer.files.length > 0 && !targetIsTimeline) {
+            console.log('ファイルドロップ処理');
             for (let file of event.dataTransfer.files) {
                 this.addAsset(file);
             }
@@ -325,6 +334,9 @@ class StarlitTimelineApp {
         // タイムラインへのドロップ (素材エクスプローラーから)
         const assetId = event.dataTransfer.getData('assetId');
         if (assetId && targetIsTimeline) {
+            console.log('タイムラインへクリップ追加:', assetId);
+            console.log('追加前のクリップ数:', this.clips.length);
+            
             // timelineCanvasの座標を取得
             const canvasRect = this.timelineCanvas.getBoundingClientRect();
             const scrollContainer = document.getElementById('timelineScroll');
@@ -336,6 +348,7 @@ class StarlitTimelineApp {
             const track = Math.floor(y / this.trackHeight);
             
             this.addClipFromAsset(assetId, time, track);
+            console.log('追加後のクリップ数:', this.clips.length);
         }
     }
     
@@ -660,20 +673,26 @@ class StarlitTimelineApp {
     
     // タイムライン操作
     handleTimelineMouseDown(e) {
+        console.log('=== mousedown ===');
         const rect = this.timelineCanvas.getBoundingClientRect();
         const scrollContainer = document.getElementById('timelineScroll');
         
         const x = e.clientX - rect.left + scrollContainer.scrollLeft;
         const y = e.clientY - rect.top + scrollContainer.scrollTop;
         
+        console.log('座標:', x, y);
+        
         // クリップ選択
         const clickedClip = this.getClipAt(x, y);
+        console.log('クリックしたクリップ:', clickedClip ? clickedClip.asset.name : 'なし');
+        
         if (clickedClip) {
             this.selectedClip = clickedClip;
             this.isDragging = true;
             this.isMovingClip = true; // クリップ移動中フラグ
             this.dragStartX = x;
             this.dragStartY = y;
+            console.log('ドラッグ開始 - isDragging:', this.isDragging);
             this.updatePropertiesPanel();
             this.drawTimeline();
             
@@ -683,6 +702,7 @@ class StarlitTimelineApp {
         }
         
         // プレイヘッド移動
+        console.log('プレイヘッド移動');
         this.currentTime = x / this.zoom;
         this.updateTimeDisplay();
         this.updatePreview();
@@ -691,6 +711,8 @@ class StarlitTimelineApp {
     
     handleTimelineMouseMove(e) {
         if (!this.isDragging || !this.selectedClip) return;
+        
+        console.log('=== mousemove (dragging) ===');
         
         const rect = this.timelineCanvas.getBoundingClientRect();
         const scrollContainer = document.getElementById('timelineScroll');
@@ -701,8 +723,13 @@ class StarlitTimelineApp {
         const deltaX = x - this.dragStartX;
         const deltaY = y - this.dragStartY;
         
+        console.log('移動量:', deltaX, deltaY);
+        console.log('移動前 startTime:', this.selectedClip.startTime);
+        
         this.selectedClip.startTime += deltaX / this.zoom;
         this.selectedClip.track += Math.floor(deltaY / this.trackHeight);
+        
+        console.log('移動後 startTime:', this.selectedClip.startTime);
         
         this.selectedClip.startTime = Math.max(0, this.selectedClip.startTime);
         this.selectedClip.track = Math.max(0, Math.min(this.selectedClip.track, this.trackCount - 1));
@@ -715,11 +742,16 @@ class StarlitTimelineApp {
     }
     
     handleTimelineMouseUp(e) {
+        console.log('=== mouseup ===');
+        console.log('isDragging:', this.isDragging);
+        console.log('クリップ数:', this.clips.length);
+        
         if (this.isDragging) {
             this.saveHistory();
         }
         this.isDragging = false;
         this.isMovingClip = false; // フラグをリセット
+        console.log('ドラッグ終了');
     }
     
     getClipAt(x, y) {
