@@ -1254,7 +1254,9 @@ class StarlitTimelineApp {
         
         // ループ処理 - 継続時間内で素材を繰り返す
         let effectiveLocalTime = localTime;
-        if (clip.asset.type === 'video' || clip.asset.type === 'sequence') {
+        
+        // 動画と連番画像のみループ処理を行う（画像と音声は除外）
+        if ((clip.asset.type === 'video' || clip.asset.type === 'sequence') && clip.loopEnabled) {
             // 素材の実際の長さを取得
             let originalDuration;
             if (clip.asset.type === 'video' && clip.videoElement) {
@@ -1266,8 +1268,14 @@ class StarlitTimelineApp {
                 originalDuration = clip.duration; // フォールバック
             }
             
-            // 継続時間内でループ
-            effectiveLocalTime = localTime % originalDuration;
+            // trimStartを考慮したループ処理
+            const trimStart = clip.trimStart || 0;
+            const availableDuration = originalDuration - trimStart;
+            
+            // クリップ内での有効な再生位置を計算
+            if (availableDuration > 0) {
+                effectiveLocalTime = (localTime % availableDuration);
+            }
         }
         
         // トランジション進行度を計算
@@ -1294,7 +1302,7 @@ class StarlitTimelineApp {
         
         // 音声クリップの場合は音声のみ再生
         if (clip.asset.type === 'audio') {
-            this.playAudioClip(clip, localTime);
+            this.playAudioClip(clip, effectiveLocalTime);
             return;
         }
         
@@ -1314,7 +1322,7 @@ class StarlitTimelineApp {
             await this.drawImage(clip);
         } else if (clip.asset.type === 'video') {
             await this.drawVideo(clip, effectiveLocalTime);
-            this.playAudioClip(clip, localTime);
+            this.playAudioClip(clip, effectiveLocalTime);
         } else if (clip.asset.type === 'sequence') {
             await this.drawSequence(clip, effectiveLocalTime);
         }
@@ -1745,9 +1753,12 @@ class StarlitTimelineApp {
         newClip.startTime = this.selectedClip.startTime + localTime;
         newClip.duration = this.selectedClip.duration - localTime;
         
-        // 後半クリップのtrimStartを調整（素材の再生開始位置をずらす）
-        if (!newClip.trimStart) newClip.trimStart = 0;
-        newClip.trimStart = (this.selectedClip.trimStart || 0) + localTime;
+        // 動画・音声・連番画像の場合のみtrimStartを調整
+        // 画像は静止画なのでtrimStartは不要
+        if (this.selectedClip.asset.type !== 'image') {
+            if (!newClip.trimStart) newClip.trimStart = 0;
+            newClip.trimStart = (this.selectedClip.trimStart || 0) + localTime;
+        }
         
         // キーフレームを調整
         Object.keys(newClip.keyframes).forEach(property => {
@@ -1770,8 +1781,9 @@ class StarlitTimelineApp {
         this.saveHistory();
         
         console.log('✂️ クリップを分割:', {
+            タイプ: this.selectedClip.asset.type,
             前半: { startTime: this.selectedClip.startTime, duration: this.selectedClip.duration, trimStart: this.selectedClip.trimStart || 0 },
-            後半: { startTime: newClip.startTime, duration: newClip.duration, trimStart: newClip.trimStart }
+            後半: { startTime: newClip.startTime, duration: newClip.duration, trimStart: newClip.trimStart || 0 }
         });
     }
     
