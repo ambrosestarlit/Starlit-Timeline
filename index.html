@@ -3,212 +3,79 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Starlit Timeline Editor Web</title>
+    <title>Starlit Timeline Editor Pro - JK丸ゴシック版</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div id="app">
-        <!-- メニューバー -->
-        <div class="menu-bar">
-            <div class="menu-item">
-                <span>ファイル</span>
-                <div class="submenu">
-                    <div class="submenu-item" onclick="app.newProject()">新規プロジェクト</div>
-                    <div class="submenu-item" onclick="app.openProject()">プロジェクトを開く</div>
-                    <div class="submenu-item" onclick="app.saveProject()">プロジェクトを保存</div>
-                    <div class="submenu-divider"></div>
-                    <div class="submenu-item" onclick="app.importMedia()">素材をインポート</div>
-                </div>
-            </div>
-            <div class="menu-item">
-                <span>編集</span>
-                <div class="submenu">
-                    <div class="submenu-item" onclick="app.undo()">元に戻す (Ctrl+Z)</div>
-                    <div class="submenu-item" onclick="app.redo()">やり直し (Ctrl+Y)</div>
-                    <div class="submenu-divider"></div>
-                    <div class="submenu-item" onclick="app.deleteSelected()">削除 (Delete)</div>
-                </div>
-            </div>
-            <div class="menu-item">
-                <span>書き出し</span>
-                <div class="submenu">
-                    <div class="submenu-item" onclick="app.exportVideo()">動画書き出し (MP4)</div>
-                    <div class="submenu-item" onclick="app.exportSequence()">連番PNG書き出し</div>
-                    <div class="submenu-item" onclick="app.exportAudio()">音声のみ書き出し</div>
-                </div>
+        <!-- ヘッダー -->
+        <div id="header">
+            <h1>⭐ Starlit Timeline Editor Pro</h1>
+            <div class="button-group">
+                <button class="btn btn-primary" onclick="app.importAsset()">📁 素材追加</button>
+                <button class="btn btn-secondary" onclick="app.saveProject()">💾 保存</button>
+                <button class="btn btn-secondary" onclick="app.loadProject()">📂 読込</button>
+                <button class="btn btn-success" onclick="app.exportVideo()">🎬 書き出し</button>
             </div>
         </div>
 
-        <!-- ツールバー -->
-        <div class="toolbar">
-            <div class="toolbar-separator"></div>
-        </div>
-
-        <div class="main-container">
+        <!-- メインワークスペース -->
+        <div id="workspace">
             <!-- 左サイドバー: 素材エクスプローラー -->
-            <div class="sidebar left-sidebar">
-                <div class="sidebar-header">
-                    <h3>📁 素材</h3>
-                    <div class="header-controls">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="sequenceCheckbox">
-                            <span>連番</span>
-                        </label>
-                        <button class="round-button small" onclick="app.importMedia()" title="素材を追加">➕</button>
-                    </div>
+            <div id="leftSidebar">
+                <div class="sidebar-header">📦 素材エクスプローラー</div>
+                
+                <!-- フィルタータブ -->
+                <div class="filter-tabs">
+                    <button class="filter-tab active" onclick="app.filterAssets('all')">すべて</button>
+                    <button class="filter-tab" onclick="app.filterAssets('image')">🖼️ 画像</button>
+                    <button class="filter-tab" onclick="app.filterAssets('video')">🎥 動画</button>
+                    <button class="filter-tab" onclick="app.filterAssets('audio')">🎵 音声</button>
+                    <button class="filter-tab" onclick="app.filterAssets('sequence')">📸 連番</button>
                 </div>
-                <div class="asset-filter">
-                    <button class="filter-button active" onclick="app.setAssetFilter('all')" data-filter="all">
-                        すべて
-                    </button>
-                    <button class="filter-button" onclick="app.setAssetFilter('image')" data-filter="image">
-                        画像
-                    </button>
-                    <button class="filter-button" onclick="app.setAssetFilter('video')" data-filter="video">
-                        動画
-                    </button>
-                    <button class="filter-button" onclick="app.setAssetFilter('audio')" data-filter="audio">
-                        音声
-                    </button>
-                    <button class="filter-button" onclick="app.setAssetFilter('sequence')" data-filter="sequence">
-                        連番
-                    </button>
-                </div>
-                <div class="asset-explorer" id="assetExplorer">
-                    <div class="empty-message">素材をドロップまたは➕ボタンで追加</div>
-                </div>
+                
+                <div id="assetList"></div>
             </div>
 
             <!-- 中央エリア -->
-            <div class="center-area">
+            <div id="centerArea">
                 <!-- プレビューエリア -->
-                <div class="preview-area">
+                <div id="previewArea">
                     <canvas id="previewCanvas" width="1920" height="1080"></canvas>
-                    <div class="preview-controls">
-                        <div class="time-display" id="timeDisplay">00:00:00.000</div>
-                        <div class="resolution-display">1920 x 1080</div>
-                    </div>
+                </div>
+
+                <!-- コントロールバー -->
+                <div id="controlBar">
+                    <button class="control-btn" onclick="app.skipToStart()">⏮️</button>
+                    <button class="control-btn" id="playPauseBtn" onclick="app.togglePlayPause()">▶️</button>
+                    <button class="control-btn" onclick="app.skipToEnd()">⏭️</button>
+                    <div id="timeDisplay">00:00.000</div>
+                    <span class="zoom-label">🔍 ズーム:</span>
+                    <input type="range" id="timelineZoom" min="10" max="200" value="100" 
+                           oninput="app.updateTimelineZoom(this.value)">
                 </div>
 
                 <!-- タイムラインエリア -->
-                <div class="timeline-area">
-                    <!-- タイムラインヘッダー -->
-                    <div class="timeline-header">
-                        <div class="timeline-title">
-                            <span>⏱️ タイムライン</span>
+                <div id="timelineArea">
+                    <div id="timelineContainer">
+                        <div id="timelineRuler"></div>
+                        <div id="playhead">
+                            <div class="playhead-handle"></div>
                         </div>
-                        <div class="export-range-controls">
-                            <label>書き出し範囲:</label>
-                            <input type="number" id="exportStart" value="0" min="0" step="0.1" class="time-input">
-                            <span>～</span>
-                            <input type="number" id="exportEnd" value="10" min="0" step="0.1" class="time-input">
-                            <span>秒</span>
-                            <button class="round-button small" onclick="app.setExportRangeToAll()">⤢ 全体</button>
-                            <button class="round-button small" onclick="app.setExportRangeToSelection()">⬚ 選択</button>
-                        </div>
-                    </div>
-
-                    <!-- タイムラインコントロール -->
-                    <div class="timeline-controls">
-                        <label>🔍 ズーム:</label>
-                        <input type="range" id="zoomSlider" min="10" max="200" value="50" class="styled-slider">
-                        <span id="zoomValue">50 px/秒</span>
-                        <div class="control-separator"></div>
-                        <label>📊 トラック:</label>
-                        <button class="round-button small" onclick="app.decreaseTrackCount()">➖</button>
-                        <span id="trackCount" class="track-count">5</span>
-                        <button class="round-button small" onclick="app.increaseTrackCount()">➕</button>
-                        <div class="control-separator"></div>
-                        <button class="round-button small" onclick="app.splitClip()">✂️ 分割</button>
-                        <div class="control-separator"></div>
-                        <button class="icon-button" onclick="app.play()" id="playButton" title="再生">
-                            <img src="play.png" alt="再生" class="button-icon">
-                        </button>
-                        <button class="icon-button" onclick="app.stop()" title="停止">
-                            <img src="stop.png" alt="停止" class="button-icon">
-                        </button>
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="loopPlaybackCheckbox">
-                            <span>ループ再生</span>
-                        </label>
-                        <div class="control-separator"></div>
-                        <button class="icon-button" onclick="app.undo()" title="元に戻す (Ctrl+Z)">
-                            <img src="undo.png" alt="元に戻す" class="button-icon">
-                        </button>
-                        <button class="icon-button" onclick="app.redo()" title="やり直し (Ctrl+Y)">
-                            <img src="redo.png" alt="やり直し" class="button-icon">
-                        </button>
-                    </div>
-
-                    <!-- タイムライン定規 -->
-                    <div class="timeline-ruler">
-                        <canvas id="rulerCanvas" height="30"></canvas>
-                    </div>
-
-                    <!-- タイムラインキャンバス -->
-                    <div class="timeline-scroll" id="timelineScroll">
-                        <canvas id="timelineCanvas" width="3000" height="500"></canvas>
+                        <div id="tracks"></div>
                     </div>
                 </div>
             </div>
 
-            <!-- 右サイドバー: プロパティ＆エフェクト -->
-            <div class="sidebar right-sidebar">
-                <div class="properties-panel">
-                    <div class="sidebar-header">
-                        <h3>⚙️ プロパティ</h3>
-                    </div>
-                    <div id="propertiesContent" class="properties-content">
-                        <div class="empty-message">クリップを選択してください</div>
-                    </div>
-                </div>
-
-                <div class="effects-panel">
-                    <div class="sidebar-header">
-                        <h3>✨ エフェクト</h3>
-                    </div>
-                    <div class="effects-content">
-                        <div class="effect-item">
-                            <div class="effect-header" onclick="app.toggleEffect('letterbox')">
-                                <span>🎬 映画風レターボックス</span>
-                                <input type="checkbox" id="letterboxEnable" onchange="app.updatePreview()">
-                            </div>
-                            <div class="effect-controls" id="letterboxControls">
-                                <label>太さ:</label>
-                                <input type="range" min="0" max="200" value="100" class="effect-slider" id="letterboxHeight" oninput="app.updatePreview()">
-                                <span id="letterboxHeightValue">100px</span>
-                                
-                                <label>色:</label>
-                                <input type="color" value="#000000" id="letterboxColor" onchange="app.updatePreview()">
-                            </div>
-                        </div>
-
-                        <div class="effect-item">
-                            <div class="effect-header" onclick="app.toggleEffect('gradient')">
-                                <span>🌈 グラデーション</span>
-                                <input type="checkbox" id="gradientEnable" onchange="app.updatePreview()">
-                            </div>
-                            <div class="effect-controls" id="gradientControls">
-                                <label>上部の色:</label>
-                                <input type="color" value="#FFFF00" id="gradientTopColor" onchange="app.updatePreview()">
-                                
-                                <label>下部の色:</label>
-                                <input type="color" value="#0000FF" id="gradientBottomColor" onchange="app.updatePreview()">
-                                
-                                <label>不透明度:</label>
-                                <input type="range" min="0" max="100" value="50" class="effect-slider" id="gradientOpacity" oninput="app.updatePreview()">
-                                <span id="gradientOpacityValue">50%</span>
-                            </div>
-                        </div>
-                    </div>
+            <!-- 右サイドバー: プロパティパネル -->
+            <div id="rightSidebar">
+                <div class="sidebar-header">⚙️ プロパティ</div>
+                <div id="propertiesContent">
+                    <div class="empty-message">クリップを選択してください</div>
                 </div>
             </div>
         </div>
     </div>
-
-    <!-- 非表示のファイル入力 -->
-    <input type="file" id="fileInput" multiple accept="image/*,video/*,audio/*" style="display: none;" onchange="app.handleFileSelect(event)">
-    <input type="file" id="projectInput" accept=".json" style="display: none;" onchange="app.handleProjectLoad(event)">
 
     <script src="app.js"></script>
 </body>
