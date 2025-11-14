@@ -6,6 +6,7 @@ class StarlitTimelineApp {
         this.selectedClip = null;
         this.currentTime = 0;
         this.isPlaying = false;
+        this.loopPlayback = false; // ループ再生フラグ
         this.zoom = 50; // px per second
         this.trackCount = 5;
         this.trackHeight = 80;
@@ -1563,8 +1564,13 @@ class StarlitTimelineApp {
             return;
         }
         
+        // ループ再生チェックボックスの状態を取得
+        this.loopPlayback = document.getElementById('loopPlaybackCheckbox').checked;
+        
         this.isPlaying = true;
-        document.getElementById('playButton').textContent = '⏸️ 一時停止';
+        const playButton = document.getElementById('playButton');
+        playButton.innerHTML = '<img src="pause.png" alt="一時停止" class="button-icon">';
+        playButton.title = '一時停止';
         
         const startTime = Date.now();
         const startFrame = this.currentTime;
@@ -1574,8 +1580,19 @@ class StarlitTimelineApp {
             this.currentTime = startFrame + elapsed;
             
             if (this.currentTime >= this.duration) {
-                this.stop();
-                return;
+                if (this.loopPlayback) {
+                    // ループ再生の場合は最初に戻る
+                    this.currentTime = 0;
+                    const newStartTime = Date.now();
+                    // startTimeとstartFrameを更新
+                    this.playInterval && clearInterval(this.playInterval);
+                    this.play();
+                    return;
+                } else {
+                    // ループしない場合は停止
+                    this.stop();
+                    return;
+                }
             }
             
             this.updateTimeDisplay();
@@ -1586,7 +1603,9 @@ class StarlitTimelineApp {
     
     pause() {
         this.isPlaying = false;
-        document.getElementById('playButton').textContent = '▶️ 再生';
+        const playButton = document.getElementById('playButton');
+        playButton.innerHTML = '<img src="play.png" alt="再生" class="button-icon">';
+        playButton.title = '再生';
         if (this.playInterval) {
             clearInterval(this.playInterval);
         }

@@ -123,6 +123,34 @@ body {
     font-size: 12px;
 }
 
+/* アイコンボタン */
+.icon-button {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s;
+    border-radius: 8px;
+}
+
+.icon-button:hover {
+    background: rgba(139, 69, 19, 0.2);
+    transform: scale(1.05);
+}
+
+.icon-button:active {
+    transform: scale(0.95);
+}
+
+.button-icon {
+    width: 32px;
+    height: 32px;
+    display: block;
+}
+
 /* メインコンテナ */
 .main-container {
     display: flex;

@@ -42,12 +42,6 @@
         <!-- ツールバー -->
         <div class="toolbar">
             <div class="toolbar-separator"></div>
-            <button class="round-button" onclick="app.play()" id="playButton">
-                ▶️ 再生
-            </button>
-            <button class="round-button" onclick="app.stop()">
-                ⏹️ 停止
-            </button>
         </div>
 
         <div class="main-container">
@@ -126,6 +120,17 @@
                         <button class="round-button small" onclick="app.increaseTrackCount()">➕</button>
                         <div class="control-separator"></div>
                         <button class="round-button small" onclick="app.splitClip()">✂️ 分割</button>
+                        <div class="control-separator"></div>
+                        <button class="icon-button" onclick="app.play()" id="playButton" title="再生">
+                            <img src="play.png" alt="再生" class="button-icon">
+                        </button>
+                        <button class="icon-button" onclick="app.stop()" title="停止">
+                            <img src="stop.png" alt="停止" class="button-icon">
+                        </button>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="loopPlaybackCheckbox">
+                            <span>🔁 ループ再生</span>
+                        </label>
                     </div>
 
                     <!-- タイムライン定規 -->
