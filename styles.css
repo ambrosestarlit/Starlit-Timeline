@@ -9,6 +9,14 @@
     --bg-dark: #2D1810;
 }
 
+/* カスタムフォント */
+@font-face {
+    font-family: 'YDWbananaslipplus';
+    src: url('YDWbananaslipplus.otf') format('opentype');
+    font-weight: normal;
+    font-style: normal;
+}
+
 * {
     margin: 0;
     padding: 0;
@@ -16,7 +24,7 @@
 }
 
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: 'YDWbananaslipplus', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background: var(--bg-dark);
     color: var(--biscuit-light);
     overflow: hidden;
