@@ -1008,6 +1008,20 @@ class StarlitTimelineApp {
         this.saveHistory();
     }
     
+    // プロパティセクションの折りたたみ
+    togglePropertySection(header) {
+        const content = header.nextElementSibling;
+        const icon = header.querySelector('.section-toggle-icon');
+        
+        if (content.classList.contains('collapsed')) {
+            content.classList.remove('collapsed');
+            icon.textContent = '▼';
+        } else {
+            content.classList.add('collapsed');
+            icon.textContent = '▶';
+        }
+    }
+    
     updateClipProperty(property, value) {
         if (!this.selectedClip) return;
         
