@@ -1,70 +1,62 @@
 # Starlit Timeline Editor - 変更履歴 📋
 
-## v3.5 (2025/11/14) - レターボックス位置修正 🎬
+## v3.5 (2025/11/14) - レターボックス位置修正（再修正） 🎬
 
 ### 🎯 修正内容
 
-**レターボックス・素材描画・トランジションすべてを1920x1080基準に統一！**
+**キャンバスの実際のサイズ（width/height属性）を正しく使用！**
 
 #### 🐛 問題点
 
-- レターボックスの位置がキャンバスサイズに依存していた
-- 素材の描画中心がキャンバスサイズに依存していた
-- トランジション効果もキャンバスサイズに依存していた
-- **結果**: 素材とエフェクトの位置がずれる
+- キャンバスHTML属性: `width="1920" height="1080"`
+- キャンバスCSS表示: `max-width: 100%; max-height: 400px;`
+- **以前の間違った修正**: 固定値1920x1080をハードコード
+- **実際の問題**: `this.previewCanvas.width/height` を使うべきところを固定値にしていた
 
-#### ✨ 修正点
+#### ✨ 正しい修正
+
+すべての描画で `this.previewCanvas.width` と `this.previewCanvas.height` を使用：
 
 1. **applyEffects() - エフェクト描画**
 ```javascript
-// Before
-const width = this.previewCanvas.width;
-const height = this.previewCanvas.height;
-
-// After
-const width = 1920;  // 固定
-const height = 1080; // 固定
+// 正しい方法
+const width = this.previewCanvas.width;   // HTMLのwidth属性 = 1920
+const height = this.previewCanvas.height; // HTMLのheight属性 = 1080
 ```
 
 2. **renderClip() - 素材描画の中心位置**
 ```javascript
-// Before
+// 正しい方法
 ctx.translate(this.previewCanvas.width / 2 + x, this.previewCanvas.height / 2 + y);
-
-// After
-ctx.translate(1920 / 2 + x, 1080 / 2 + y);
 ```
 
 3. **applyTransition() - トランジション効果**
 ```javascript
-// Before
+// 正しい方法
 const width = this.previewCanvas.width;
 const height = this.previewCanvas.height;
-
-// After
-const width = 1920;  // 固定
-const height = 1080; // 固定
 ```
+
+#### 📝 重要な理解
+
+**キャンバスには2つのサイズがある:**
+
+1. **内部解像度** (HTML属性): `<canvas width="1920" height="1080">`
+   - 実際の描画領域
+   - `this.previewCanvas.width` で取得
+   - 描画座標はこれを基準にする
+
+2. **表示サイズ** (CSS): `max-width: 100%; max-height: 400px;`
+   - ブラウザでの見た目のサイズ
+   - 内部解像度からCSSで自動スケーリング
+   - 描画には影響しない
 
 #### 🎨 効果
 
-- ✅ **レターボックス**: 常に画面上下（y=0 と y=1080-高さ）に表示
-- ✅ **素材の中心**: 常に (960, 540) を基準
-- ✅ **トランジション**: 1920x1080全体に適用
-- ✅ **一貫性**: すべてが同じ座標系で動作
-
-#### 📝 技術詳細
-
-**変更箇所:**
-- `applyEffects()` メソッド（エフェクト）
-- `renderClip()` メソッド（素材描画）
-- `applyTransition()` メソッド（トランジション）
-
-**座標系の統一:**
-```
-すべて1920x1080を基準にすることで、
-素材・エフェクト・トランジションの位置が完全に一致
-```
+- ✅ **レターボックス**: キャンバス上端・下端に正確に配置
+- ✅ **素材の中心**: キャンバス中央に正確に配置
+- ✅ **トランジション**: キャンバス全体に正確に適用
+- ✅ **ずれなし**: CSS表示サイズに関係なく正しく描画
 
 ---
 
