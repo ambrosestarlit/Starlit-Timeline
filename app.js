@@ -1532,16 +1532,7 @@ class StarlitTimelineApp {
         // 座標変換を完全にリセット（重要！）
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         
-        // レターボックス（プロジェクト全体に適用）
-        if (this.effects.letterbox.enabled) {
-            ctx.fillStyle = this.effects.letterbox.color;
-            // 上部のレターボックス
-            ctx.fillRect(0, 0, width, this.effects.letterbox.height);
-            // 下部のレターボックス
-            ctx.fillRect(0, height - this.effects.letterbox.height, width, this.effects.letterbox.height);
-        }
-        
-        // グラデーション（プロジェクト全体に適用）
+        // グラデーション（先に描画 = レターボックスの下）
         if (this.effects.gradient.enabled) {
             const gradient = ctx.createLinearGradient(0, 0, 0, height);
             
@@ -1554,6 +1545,15 @@ class StarlitTimelineApp {
             
             ctx.fillStyle = gradient;
             ctx.fillRect(0, 0, width, height);
+        }
+        
+        // レターボックス（後に描画 = グラデーションの上）
+        if (this.effects.letterbox.enabled) {
+            ctx.fillStyle = this.effects.letterbox.color;
+            // 上部のレターボックス
+            ctx.fillRect(0, 0, width, this.effects.letterbox.height);
+            // 下部のレターボックス
+            ctx.fillRect(0, height - this.effects.letterbox.height, width, this.effects.letterbox.height);
         }
     }
     
