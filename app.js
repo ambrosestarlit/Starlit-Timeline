@@ -1524,17 +1524,20 @@ class StarlitTimelineApp {
     
     applyEffects() {
         const ctx = this.previewCtx;
-        const width = this.previewCanvas.width;
-        const height = this.previewCanvas.height;
+        // 常に1920x1080を基準にする
+        const width = 1920;
+        const height = 1080;
         
-        // レターボックス
+        // レターボックス（プロジェクト全体に適用）
         if (this.effects.letterbox.enabled) {
             ctx.fillStyle = this.effects.letterbox.color;
+            // 上部のレターボックス
             ctx.fillRect(0, 0, width, this.effects.letterbox.height);
+            // 下部のレターボックス
             ctx.fillRect(0, height - this.effects.letterbox.height, width, this.effects.letterbox.height);
         }
         
-        // グラデーション
+        // グラデーション（プロジェクト全体に適用）
         if (this.effects.gradient.enabled) {
             const gradient = ctx.createLinearGradient(0, 0, 0, height);
             
