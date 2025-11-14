@@ -87,8 +87,10 @@ class StarlitTimelineApp {
     setupEventListeners() {
         // タイムラインキャンバスイベント
         this.timelineCanvas.addEventListener('mousedown', (e) => this.handleTimelineMouseDown(e));
-        this.timelineCanvas.addEventListener('mousemove', (e) => this.handleTimelineMouseMove(e));
-        this.timelineCanvas.addEventListener('mouseup', (e) => this.handleTimelineMouseUp(e));
+        
+        // mouseupとmousemoveはdocumentレベルで監視（ドラッグ中にキャンバス外に出ても対応）
+        document.addEventListener('mousemove', (e) => this.handleTimelineMouseMove(e));
+        document.addEventListener('mouseup', (e) => this.handleTimelineMouseUp(e));
         
         // タイムラインのドラッグ&ドロップ
         const timelineScroll = document.getElementById('timelineScroll');
@@ -654,8 +656,10 @@ class StarlitTimelineApp {
     // タイムライン操作
     handleTimelineMouseDown(e) {
         const rect = this.timelineCanvas.getBoundingClientRect();
-        const x = e.clientX - rect.left + this.timelineCanvas.parentElement.scrollLeft;
-        const y = e.clientY - rect.top + this.timelineCanvas.parentElement.scrollTop;
+        const scrollContainer = document.getElementById('timelineScroll');
+        
+        const x = e.clientX - rect.left + scrollContainer.scrollLeft;
+        const y = e.clientY - rect.top + scrollContainer.scrollTop;
         
         // クリップ選択
         const clickedClip = this.getClipAt(x, y);
@@ -680,8 +684,10 @@ class StarlitTimelineApp {
         if (!this.isDragging || !this.selectedClip) return;
         
         const rect = this.timelineCanvas.getBoundingClientRect();
-        const x = e.clientX - rect.left + this.timelineCanvas.parentElement.scrollLeft;
-        const y = e.clientY - rect.top + this.timelineCanvas.parentElement.scrollTop;
+        const scrollContainer = document.getElementById('timelineScroll');
+        
+        const x = e.clientX - rect.left + scrollContainer.scrollLeft;
+        const y = e.clientY - rect.top + scrollContainer.scrollTop;
         
         const deltaX = x - this.dragStartX;
         const deltaY = y - this.dragStartY;
