@@ -1325,7 +1325,10 @@ class StarlitTimelineApp {
     // 連番アニメーションを描画
     async drawSequence(clip, localTime) {
         const frameRate = clip.frameRate || 30;
-        const frameIndex = Math.floor(localTime * frameRate) % clip.asset.frameCount;
+        
+        // trimStartを考慮した実際の時間を計算
+        const actualTime = localTime + (clip.trimStart || 0);
+        const frameIndex = Math.floor(actualTime * frameRate) % clip.asset.frameCount;
         
         return new Promise((resolve) => {
             if (!clip.sequenceImages) {
@@ -1439,9 +1442,12 @@ class StarlitTimelineApp {
     playAudioClip(clip, localTime) {
         if (!clip.audioElement) return;
         
+        // trimStartを考慮した実際の再生位置を計算
+        const actualTime = localTime + (clip.trimStart || 0);
+        
         if (this.isPlaying) {
             if (clip.audioElement.paused) {
-                clip.audioElement.currentTime = localTime;
+                clip.audioElement.currentTime = actualTime;
                 clip.audioElement.volume = clip.volume || 1.0;
                 clip.audioElement.play().catch(e => console.log('Audio play error:', e));
             }
@@ -1498,16 +1504,19 @@ class StarlitTimelineApp {
     
     async drawVideo(clip, localTime) {
         return new Promise((resolve) => {
+            // trimStartを考慮した実際の再生位置を計算
+            const actualTime = localTime + (clip.trimStart || 0);
+            
             if (!clip.videoElement) {
                 clip.videoElement = document.createElement('video');
                 clip.videoElement.src = clip.asset.url;
                 clip.videoElement.muted = true;
                 clip.videoElement.onloadeddata = () => {
-                    clip.videoElement.currentTime = localTime;
+                    clip.videoElement.currentTime = actualTime;
                 };
             } else {
-                if (Math.abs(clip.videoElement.currentTime - localTime) > 0.1) {
-                    clip.videoElement.currentTime = localTime;
+                if (Math.abs(clip.videoElement.currentTime - actualTime) > 0.1) {
+                    clip.videoElement.currentTime = actualTime;
                 }
             }
             
@@ -1730,11 +1739,15 @@ class StarlitTimelineApp {
             return;
         }
         
-        // 新しいクリップを作成
+        // 新しいクリップを作成（後半部分）
         const newClip = JSON.parse(JSON.stringify(this.selectedClip));
         newClip.id = Date.now() + Math.random();
         newClip.startTime = this.selectedClip.startTime + localTime;
         newClip.duration = this.selectedClip.duration - localTime;
+        
+        // 後半クリップのtrimStartを調整（素材の再生開始位置をずらす）
+        if (!newClip.trimStart) newClip.trimStart = 0;
+        newClip.trimStart = (this.selectedClip.trimStart || 0) + localTime;
         
         // キーフレームを調整
         Object.keys(newClip.keyframes).forEach(property => {
@@ -1743,16 +1756,23 @@ class StarlitTimelineApp {
                 .map(kf => ({ time: kf.time - localTime, value: kf.value }));
         });
         
-        // 元のクリップの長さを調整
+        // 元のクリップの長さを調整（前半部分）
         this.selectedClip.duration = localTime;
         Object.keys(this.selectedClip.keyframes).forEach(property => {
             this.selectedClip.keyframes[property] = this.selectedClip.keyframes[property]
                 .filter(kf => kf.time <= localTime);
         });
         
+        // trimStartは元のクリップでは変更なし（先頭から再生）
+        
         this.clips.push(newClip);
         this.drawTimeline();
         this.saveHistory();
+        
+        console.log('✂️ クリップを分割:', {
+            前半: { startTime: this.selectedClip.startTime, duration: this.selectedClip.duration, trimStart: this.selectedClip.trimStart || 0 },
+            後半: { startTime: newClip.startTime, duration: newClip.duration, trimStart: newClip.trimStart }
+        });
     }
     
     deleteSelected() {
