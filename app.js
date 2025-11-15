@@ -1104,7 +1104,14 @@ class StarlitTimelineApp {
     handleTimelineMouseUp(e) {
         console.log('=== mouseup ===');
         console.log('isDragging:', this.isDragging);
+        console.log('isPreviewDragging:', this.isPreviewDragging);
         console.log('クリップ数:', this.clips.length);
+        
+        // プレビューキャンバスでのドラッグ中は何もしない
+        if (this.isPreviewDragging) {
+            console.log('プレビュードラッグ中なのでスキップ');
+            return;
+        }
         
         if (this.isDragging && this.isMovingClip && this.selectedClip) {
             // オートトリミング処理を実行
@@ -3802,12 +3809,19 @@ class StarlitTimelineApp {
                 rotation: this.getKeyframeValue(this.selectedClip, 'rotation', localTime),
                 scale: this.getKeyframeValue(this.selectedClip, 'scale', localTime)
             };
+            console.log('isPreviewDragging set to:', this.isPreviewDragging);
+            console.log('previewDragMode:', this.previewDragMode);
             e.preventDefault();
         }
     }
     
     handlePreviewMouseMove(e) {
-        if (!this.isPreviewDragging || !this.selectedClip) return;
+        if (!this.isPreviewDragging || !this.selectedClip) {
+            // console.log('Preview move skipped - isPreviewDragging:', this.isPreviewDragging, 'selectedClip:', !!this.selectedClip);
+            return;
+        }
+        
+        console.log('Preview mouse move - mode:', this.previewDragMode);
         
         const rect = this.previewCanvas.getBoundingClientRect();
         
