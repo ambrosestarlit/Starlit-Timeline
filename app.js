@@ -1816,9 +1816,17 @@ class StarlitTimelineApp {
                 // ※ブラウザによっては H.264/AAC の MOV をサポート
                 clip.videoElement.setAttribute('playsinline', 'true');
                 
+                // シーク中フラグを初期化
+                clip.videoElement._isSeeking = false;
+                
                 clip.videoElement.onloadeddata = () => {
                     clip.videoElement.currentTime = actualTime;
-                    // 動画が準備できたら描画
+                    clip.videoElement._isSeeking = true;
+                };
+                
+                // シーク完了時に描画
+                clip.videoElement.onseeked = () => {
+                    clip.videoElement._isSeeking = false;
                     if (clip.videoElement.readyState >= 2) {
                         this.drawVideoOnCanvas(clip);
                     }
@@ -1835,16 +1843,42 @@ class StarlitTimelineApp {
                 // タイムアウト処理
                 setTimeout(() => resolve(), 100);
             } else {
-                // currentTimeを更新（閾値を0.05秒に緩和）
-                if (Math.abs(clip.videoElement.currentTime - actualTime) > 0.05) {
-                    clip.videoElement.currentTime = actualTime;
+                // シーク中は処理をスキップ（点滅防止）
+                if (clip.videoElement._isSeeking) {
+                    resolve();
+                    return;
                 }
                 
-                // readyStateが準備できていれば即座に描画
-                if (clip.videoElement.readyState >= 2) {
-                    this.drawVideoOnCanvas(clip);
+                // currentTimeを更新（閾値を0.1秒に設定して頻繁なシークを防止）
+                const timeDiff = Math.abs(clip.videoElement.currentTime - actualTime);
+                if (timeDiff > 0.1) {
+                    clip.videoElement._isSeeking = true;
+                    clip.videoElement.currentTime = actualTime;
+                    
+                    // シーク完了を待つ
+                    const onSeeked = () => {
+                        clip.videoElement._isSeeking = false;
+                        if (clip.videoElement.readyState >= 2) {
+                            this.drawVideoOnCanvas(clip);
+                        }
+                        clip.videoElement.removeEventListener('seeked', onSeeked);
+                        resolve();
+                    };
+                    clip.videoElement.addEventListener('seeked', onSeeked);
+                    
+                    // タイムアウト（シークが完了しない場合）
+                    setTimeout(() => {
+                        clip.videoElement._isSeeking = false;
+                        clip.videoElement.removeEventListener('seeked', onSeeked);
+                        resolve();
+                    }, 100);
+                } else {
+                    // readyStateが準備できていれば即座に描画
+                    if (clip.videoElement.readyState >= 2) {
+                        this.drawVideoOnCanvas(clip);
+                    }
+                    resolve();
                 }
-                resolve();
             }
         });
     }
@@ -2033,65 +2067,104 @@ class StarlitTimelineApp {
         ctx.putImageData(imageData, 0, 0);
     }
     
-    // 簡易ブラー実装（ボックスブラー）
+    // ガウシアンブラー実装（滑らかでふんわりとしたぼかし）
     applySimpleBlur(imageData, width, height, blurRadius) {
         const data = imageData.data;
-        const tempData = new Uint8ClampedArray(data);
         
         // ブラー半径を0-300から0-20ピクセル程度に変換
-        const radius = Math.floor(blurRadius / 15);
+        let radius = Math.floor(blurRadius / 15);
         if (radius < 1) return;
         
-        // 水平方向のブラー
+        // 半径が大きすぎる場合は制限（パフォーマンス考慮）
+        radius = Math.min(radius, 20);
+        
+        // ガウシアンカーネルを生成
+        const kernel = this.generateGaussianKernel(radius);
+        const kernelSize = kernel.length;
+        const halfKernel = Math.floor(kernelSize / 2);
+        
+        const tempData = new Uint8ClampedArray(data);
+        
+        // 水平方向のガウシアンブラー
         for (let y = 0; y < height; y++) {
             for (let x = 0; x < width; x++) {
-                let r = 0, g = 0, b = 0, a = 0, count = 0;
+                let r = 0, g = 0, b = 0, a = 0, totalWeight = 0;
                 
-                for (let dx = -radius; dx <= radius; dx++) {
-                    const px = x + dx;
+                for (let i = 0; i < kernelSize; i++) {
+                    const px = x + i - halfKernel;
                     if (px >= 0 && px < width) {
                         const idx = (y * width + px) * 4;
-                        r += tempData[idx];
-                        g += tempData[idx + 1];
-                        b += tempData[idx + 2];
-                        a += tempData[idx + 3];
-                        count++;
+                        const weight = kernel[i];
+                        r += tempData[idx] * weight;
+                        g += tempData[idx + 1] * weight;
+                        b += tempData[idx + 2] * weight;
+                        a += tempData[idx + 3] * weight;
+                        totalWeight += weight;
                     }
                 }
                 
                 const idx = (y * width + x) * 4;
-                data[idx] = r / count;
-                data[idx + 1] = g / count;
-                data[idx + 2] = b / count;
-                data[idx + 3] = a / count;
+                data[idx] = r / totalWeight;
+                data[idx + 1] = g / totalWeight;
+                data[idx + 2] = b / totalWeight;
+                data[idx + 3] = a / totalWeight;
             }
         }
         
-        // 垂直方向のブラー
+        // 垂直方向のガウシアンブラー
         tempData.set(data);
         for (let y = 0; y < height; y++) {
             for (let x = 0; x < width; x++) {
-                let r = 0, g = 0, b = 0, a = 0, count = 0;
+                let r = 0, g = 0, b = 0, a = 0, totalWeight = 0;
                 
-                for (let dy = -radius; dy <= radius; dy++) {
-                    const py = y + dy;
+                for (let i = 0; i < kernelSize; i++) {
+                    const py = y + i - halfKernel;
                     if (py >= 0 && py < height) {
                         const idx = (py * width + x) * 4;
-                        r += tempData[idx];
-                        g += tempData[idx + 1];
-                        b += tempData[idx + 2];
-                        a += tempData[idx + 3];
-                        count++;
+                        const weight = kernel[i];
+                        r += tempData[idx] * weight;
+                        g += tempData[idx + 1] * weight;
+                        b += tempData[idx + 2] * weight;
+                        a += tempData[idx + 3] * weight;
+                        totalWeight += weight;
                     }
                 }
                 
                 const idx = (y * width + x) * 4;
-                data[idx] = r / count;
-                data[idx + 1] = g / count;
-                data[idx + 2] = b / count;
-                data[idx + 3] = a / count;
+                data[idx] = r / totalWeight;
+                data[idx + 1] = g / totalWeight;
+                data[idx + 2] = b / totalWeight;
+                data[idx + 3] = a / totalWeight;
             }
         }
+    }
+    
+    // ガウシアンカーネルを生成
+    generateGaussianKernel(radius) {
+        // カーネルサイズ = 半径 × 2 + 1
+        const size = radius * 2 + 1;
+        const kernel = new Array(size);
+        
+        // 標準偏差（シグマ）は半径の1/3が一般的
+        const sigma = radius / 3;
+        const twoSigmaSquare = 2 * sigma * sigma;
+        const sigmaRoot = Math.sqrt(twoSigmaSquare * Math.PI);
+        
+        let sum = 0;
+        
+        // ガウス分布の値を計算
+        for (let i = 0; i < size; i++) {
+            const x = i - radius;
+            kernel[i] = Math.exp(-(x * x) / twoSigmaSquare) / sigmaRoot;
+            sum += kernel[i];
+        }
+        
+        // 正規化（合計が1になるように）
+        for (let i = 0; i < size; i++) {
+            kernel[i] /= sum;
+        }
+        
+        return kernel;
     }
     
     // 現在時刻におけるディフュージョンパラメータを取得（キーフレーム補間）
