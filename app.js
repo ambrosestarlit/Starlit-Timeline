@@ -1102,14 +1102,14 @@ class StarlitTimelineApp {
     }
     
     handleTimelineMouseUp(e) {
-        console.log('=== mouseup ===');
-        console.log('isDragging:', this.isDragging);
-        console.log('isPreviewDragging:', this.isPreviewDragging);
-        console.log('クリップ数:', this.clips.length);
+        // console.log('=== mouseup ===');
+        // console.log('isDragging:', this.isDragging);
+        // console.log('isPreviewDragging:', this.isPreviewDragging);
+        // console.log('クリップ数:', this.clips.length);
         
         // プレビューキャンバスでのドラッグ中は何もしない
         if (this.isPreviewDragging) {
-            console.log('プレビュードラッグ中なのでスキップ');
+            // console.log('プレビュードラッグ中なのでスキップ');
             return;
         }
         
@@ -1121,7 +1121,7 @@ class StarlitTimelineApp {
         this.isDragging = false;
         this.isMovingClip = false; // フラグをリセット
         this.isSeekbarDragging = false; // シークバーフラグもリセット
-        console.log('ドラッグ終了');
+        // console.log('ドラッグ終了');
     }
     
     getClipAt(x, y) {
@@ -1778,8 +1778,8 @@ class StarlitTimelineApp {
             drawHeight = img.height;
         } else {
             const aspectRatio = img.width / img.height;
-            const maxWidth = 800;
-            const maxHeight = 600;
+            const maxWidth = this.previewCanvas.width; // 1920
+            const maxHeight = this.previewCanvas.height; // 1080
             
             drawWidth = maxWidth;
             drawHeight = maxWidth / aspectRatio;
@@ -1913,10 +1913,10 @@ class StarlitTimelineApp {
             drawWidth = clip.originalWidth;
             drawHeight = clip.originalHeight;
         } else {
-            // アスペクト比を維持してフィット
+            // アスペクト比を維持してフィット(キャンバスの実際のサイズに合わせる)
             const aspectRatio = img.width / img.height;
-            const maxWidth = 800;
-            const maxHeight = 600;
+            const maxWidth = this.previewCanvas.width; // 1920
+            const maxHeight = this.previewCanvas.height; // 1080
             
             drawWidth = maxWidth;
             drawHeight = maxWidth / aspectRatio;
@@ -2030,15 +2030,15 @@ class StarlitTimelineApp {
             drawWidth = clip.originalWidth;
             drawHeight = clip.originalHeight;
         } else {
-            // アスペクト比を維持してフィット
+            // アスペクト比を維持してフィット(キャンバスの実際のサイズに合わせる)
             const aspectRatio = video.videoWidth / video.videoHeight;
             
             if (!aspectRatio || !isFinite(aspectRatio)) {
                 return; // アスペクト比が不正なら描画しない
             }
             
-            const maxWidth = 800;
-            const maxHeight = 600;
+            const maxWidth = this.previewCanvas.width; // 1920
+            const maxHeight = this.previewCanvas.height; // 1080
             
             drawWidth = maxWidth;
             drawHeight = maxWidth / aspectRatio;
@@ -2559,9 +2559,9 @@ class StarlitTimelineApp {
         const rotation = this.getKeyframeValue(clip, 'rotation', localTime);
         const scale = this.getKeyframeValue(clip, 'scale', localTime);
         
-        // クリップのサイズを取得
-        let clipWidth = 800;
-        let clipHeight = 600;
+        // クリップのサイズを取得(キャンバスの実際のサイズに合わせる)
+        let clipWidth = this.previewCanvas.width; // 1920
+        let clipHeight = this.previewCanvas.height; // 1080
         
         if (clip.asset.type === 'image' && clip.imageElement) {
             if (clip.useOriginalSize && clip.originalWidth && clip.originalHeight) {
@@ -2569,11 +2569,11 @@ class StarlitTimelineApp {
                 clipHeight = clip.originalHeight;
             } else {
                 const aspectRatio = clip.imageElement.width / clip.imageElement.height;
-                clipWidth = 800;
-                clipHeight = 800 / aspectRatio;
-                if (clipHeight > 600) {
-                    clipHeight = 600;
-                    clipWidth = 600 * aspectRatio;
+                clipWidth = this.previewCanvas.width;
+                clipHeight = this.previewCanvas.width / aspectRatio;
+                if (clipHeight > this.previewCanvas.height) {
+                    clipHeight = this.previewCanvas.height;
+                    clipWidth = this.previewCanvas.height * aspectRatio;
                 }
             }
         } else if (clip.asset.type === 'video' && clip.videoElement) {
@@ -2582,11 +2582,11 @@ class StarlitTimelineApp {
                 clipHeight = clip.originalHeight;
             } else {
                 const aspectRatio = clip.videoElement.videoWidth / clip.videoElement.videoHeight;
-                clipWidth = 800;
-                clipHeight = 800 / aspectRatio;
-                if (clipHeight > 600) {
-                    clipHeight = 600;
-                    clipWidth = 600 * aspectRatio;
+                clipWidth = this.previewCanvas.width;
+                clipHeight = this.previewCanvas.width / aspectRatio;
+                if (clipHeight > this.previewCanvas.height) {
+                    clipHeight = this.previewCanvas.height;
+                    clipWidth = this.previewCanvas.height * aspectRatio;
                 }
             }
         } else if (clip.asset.type === 'sequence' && clip.sequenceImages && clip.sequenceImages.length > 0) {
@@ -2597,11 +2597,11 @@ class StarlitTimelineApp {
                     clipHeight = img.height;
                 } else {
                     const aspectRatio = img.width / img.height;
-                    clipWidth = 800;
-                    clipHeight = 800 / aspectRatio;
-                    if (clipHeight > 600) {
-                        clipHeight = 600;
-                        clipWidth = 600 * aspectRatio;
+                    clipWidth = this.previewCanvas.width;
+                    clipHeight = this.previewCanvas.width / aspectRatio;
+                    if (clipHeight > this.previewCanvas.height) {
+                        clipHeight = this.previewCanvas.height;
+                        clipWidth = this.previewCanvas.height * aspectRatio;
                     }
                 }
             }
@@ -2972,6 +2972,20 @@ class StarlitTimelineApp {
         const state = JSON.parse(this.history[this.historyIndex]);
         this.clips = state.clips;
         this.effects = state.effects;
+        
+        // クリップのDOM要素を再生成
+        this.clips.forEach(clip => {
+            // imageElement, videoElement, audioElement, sequenceImagesはJSONシリアライズで失われるため再生成
+            if (clip.asset.type === 'image') {
+                clip.imageElement = null; // 次回のrenderClipで再生成される
+            } else if (clip.asset.type === 'video') {
+                clip.videoElement = null; // 次回のrenderClipで再生成される
+            } else if (clip.asset.type === 'audio') {
+                this.prepareAudioClip(clip); // AudioElementを再生成
+            } else if (clip.asset.type === 'sequence') {
+                clip.sequenceImages = null; // 次回のrenderClipで再生成される
+            }
+        });
         
         this.drawTimeline();
         this.updatePreview();
@@ -3660,7 +3674,7 @@ class StarlitTimelineApp {
         
         if (distToRotate < handleHitArea) {
             this.previewCanvas.style.cursor = 'grab';
-            console.log('Hover: Rotate handle');
+            // console.log('Hover: Rotate handle');
             return;
         }
         
@@ -3672,7 +3686,7 @@ class StarlitTimelineApp {
             );
             
             if (dist < handleHitArea) {
-                console.log('Hover: Handle', handle.type);
+                // console.log('Hover: Handle', handle.type);
                 // ハンドルタイプに応じたカーソル
                 if (handle.type.startsWith('corner-tl') || handle.type.startsWith('corner-br')) {
                     this.previewCanvas.style.cursor = 'nwse-resize';
@@ -3697,16 +3711,16 @@ class StarlitTimelineApp {
         
         if (Math.abs(localX) < bbox.scaledWidth / 2 && Math.abs(localY) < bbox.scaledHeight / 2) {
             this.previewCanvas.style.cursor = 'move';
-            console.log('Hover: Inside bounding box');
+            // console.log('Hover: Inside bounding box');
         } else {
             this.previewCanvas.style.cursor = 'default';
         }
     }
     
     handlePreviewMouseDown(e) {
-        console.log('Preview mousedown triggered');
+        // console.log('Preview mousedown triggered');
         if (!this.selectedClip || !this.boundingBoxCache) {
-            console.log('No selected clip or bounding box cache');
+            // console.log('No selected clip or bounding box cache');
             return;
         }
         
@@ -3740,7 +3754,7 @@ class StarlitTimelineApp {
         );
         
         if (distToRotate < handleHitArea) {
-            console.log('Clicked rotate handle');
+            // console.log('Clicked rotate handle');
             this.isPreviewDragging = true;
             this.previewDragStart = { x: mouseX, y: mouseY };
             this.previewDragMode = 'rotate';
@@ -3767,7 +3781,7 @@ class StarlitTimelineApp {
             );
             
             if (dist < handleHitArea) {
-                console.log('Clicked handle:', handle.type);
+                // console.log('Clicked handle:', handle.type);
                 this.isPreviewDragging = true;
                 this.previewDragStart = { x: mouseX, y: mouseY };
                 this.previewDragMode = handle.type;
@@ -3780,7 +3794,9 @@ class StarlitTimelineApp {
                     rotation: this.getKeyframeValue(this.selectedClip, 'rotation', localTime),
                     scale: this.getKeyframeValue(this.selectedClip, 'scale', localTime),
                     width: this.boundingBoxCache.scaledWidth,
-                    height: this.boundingBoxCache.scaledHeight
+                    height: this.boundingBoxCache.scaledHeight,
+                    centerX: this.boundingBoxCache.centerX,
+                    centerY: this.boundingBoxCache.centerY
                 };
                 e.preventDefault();
                 return;
@@ -3797,7 +3813,7 @@ class StarlitTimelineApp {
         const localY = sin * (mouseX - bbox.centerX) + cos * (mouseY - bbox.centerY);
         
         if (Math.abs(localX) < bbox.scaledWidth / 2 && Math.abs(localY) < bbox.scaledHeight / 2) {
-            console.log('Clicked inside bounding box for move');
+            // console.log('Clicked inside bounding box for move');
             this.isPreviewDragging = true;
             this.previewDragStart = { x: mouseX, y: mouseY };
             this.previewDragMode = 'move';
@@ -3809,8 +3825,8 @@ class StarlitTimelineApp {
                 rotation: this.getKeyframeValue(this.selectedClip, 'rotation', localTime),
                 scale: this.getKeyframeValue(this.selectedClip, 'scale', localTime)
             };
-            console.log('isPreviewDragging set to:', this.isPreviewDragging);
-            console.log('previewDragMode:', this.previewDragMode);
+            // console.log('isPreviewDragging set to:', this.isPreviewDragging);
+            // console.log('previewDragMode:', this.previewDragMode);
             e.preventDefault();
         }
     }
@@ -3821,7 +3837,7 @@ class StarlitTimelineApp {
             return;
         }
         
-        console.log('Preview mouse move - mode:', this.previewDragMode);
+        // console.log('Preview mouse move - mode:', this.previewDragMode);
         
         const rect = this.previewCanvas.getBoundingClientRect();
         
@@ -3849,7 +3865,7 @@ class StarlitTimelineApp {
             // 位置移動
             const newX = this.initialTransform.x + dx;
             const newY = this.initialTransform.y + dy;
-            console.log('Moving to:', newX, newY);
+            // console.log('Moving to:', newX, newY);
             this.setKeyframeValueLive('x', newX);
             this.setKeyframeValueLive('y', newY);
             
@@ -3873,30 +3889,47 @@ class StarlitTimelineApp {
             // 角度差(度)
             const angleDelta = (currentAngle - startAngle) * 180 / Math.PI;
             const newRotation = this.initialTransform.rotation + angleDelta;
-            console.log('Rotating to:', newRotation);
+            // console.log('Rotating to:', newRotation);
             
             this.setKeyframeValueLive('rotation', newRotation);
             
         } else if (this.previewDragMode.startsWith('corner-')) {
             // コーナーハンドル: 均等スケール(アスペクト比維持)
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            const direction = this.previewDragMode.includes('br') || this.previewDragMode.includes('tr') ? 1 : -1;
+            // 中心からの距離の変化でスケールを計算
+            const initialDist = Math.sqrt(
+                Math.pow(this.previewDragStart.x - this.initialTransform.centerX, 2) +
+                Math.pow(this.previewDragStart.y - this.initialTransform.centerY, 2)
+            );
+            const currentDist = Math.sqrt(
+                Math.pow(mouseX - this.initialTransform.centerX, 2) +
+                Math.pow(mouseY - this.initialTransform.centerY, 2)
+            );
             
-            // スケール変化量を計算
-            const scaleDelta = (direction * distance) / 200; // 感度調整
-            const newScale = Math.max(0.1, this.initialTransform.scale + scaleDelta);
-            console.log('Scaling to:', newScale);
+            // スケール比率を計算
+            const scaleRatio = initialDist > 0 ? currentDist / initialDist : 1;
+            const newScale = Math.max(0.1, this.initialTransform.scale * scaleRatio);
+            // console.log('Scaling to:', newScale, 'ratio:', scaleRatio);
             
             this.setKeyframeValueLive('scale', newScale);
             
         } else if (this.previewDragMode.startsWith('edge-')) {
-            // エッジハンドル: 非均等スケール(実装は複雑なため、とりあえず均等スケールとして扱う)
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            const direction = this.previewDragMode === 'edge-r' || this.previewDragMode === 'edge-b' ? 1 : -1;
+            // エッジハンドル: 方向に応じた均等スケール
+            let scaleRatio = 1;
             
-            const scaleDelta = (direction * distance) / 200;
-            const newScale = Math.max(0.1, this.initialTransform.scale + scaleDelta);
-            console.log('Scaling to:', newScale);
+            if (this.previewDragMode === 'edge-r' || this.previewDragMode === 'edge-l') {
+                // 左右エッジ: X方向の変化
+                const initialDistX = Math.abs(this.previewDragStart.x - this.initialTransform.centerX);
+                const currentDistX = Math.abs(mouseX - this.initialTransform.centerX);
+                scaleRatio = initialDistX > 0 ? currentDistX / initialDistX : 1;
+            } else if (this.previewDragMode === 'edge-t' || this.previewDragMode === 'edge-b') {
+                // 上下エッジ: Y方向の変化
+                const initialDistY = Math.abs(this.previewDragStart.y - this.initialTransform.centerY);
+                const currentDistY = Math.abs(mouseY - this.initialTransform.centerY);
+                scaleRatio = initialDistY > 0 ? currentDistY / initialDistY : 1;
+            }
+            
+            const newScale = Math.max(0.1, this.initialTransform.scale * scaleRatio);
+            // console.log('Scaling to:', newScale, 'ratio:', scaleRatio);
             
             this.setKeyframeValueLive('scale', newScale);
         }
@@ -3908,7 +3941,7 @@ class StarlitTimelineApp {
     
     handlePreviewMouseUp(e) {
         if (this.isPreviewDragging) {
-            console.log('Preview drag ended');
+            // console.log('Preview drag ended');
             this.isPreviewDragging = false;
             this.previewDragStart = null;
             this.previewDragMode = null;
