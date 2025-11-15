@@ -747,6 +747,13 @@ class StarlitTimelineApp {
             this.isMovingClip = true; // クリップ移動中フラグ
             this.dragStartX = x;
             this.dragStartY = y;
+            
+            // 初期位置を保存
+            this.initialClipPosition = {
+                startTime: clickedClip.startTime,
+                track: clickedClip.track
+            };
+            
             console.log('ドラッグ開始 - isDragging:', this.isDragging);
             this.updatePropertiesPanel();
             this.drawTimeline();
@@ -791,7 +798,7 @@ class StarlitTimelineApp {
         }
         
         // クリップドラッグ中
-        if (!this.isDragging || !this.selectedClip) return;
+        if (!this.isDragging || !this.selectedClip || !this.initialClipPosition) return;
         
         console.log('=== mousemove (dragging) ===');
         
@@ -801,22 +808,22 @@ class StarlitTimelineApp {
         const x = e.clientX - rect.left + scrollContainer.scrollLeft;
         const y = e.clientY - rect.top + scrollContainer.scrollTop;
         
+        // ドラッグ開始位置からの差分を計算
         const deltaX = x - this.dragStartX;
         const deltaY = y - this.dragStartY;
         
         console.log('移動量:', deltaX, deltaY);
-        console.log('移動前 startTime:', this.selectedClip.startTime);
         
-        this.selectedClip.startTime += deltaX / this.zoom;
-        this.selectedClip.track += Math.floor(deltaY / this.trackHeight);
+        // 初期位置からの差分で新しい位置を計算
+        const newStartTime = this.initialClipPosition.startTime + (deltaX / this.zoom);
+        const newTrack = this.initialClipPosition.track + Math.round(deltaY / this.trackHeight);
         
-        console.log('移動後 startTime:', this.selectedClip.startTime);
+        console.log('移動前:', this.selectedClip.startTime, this.selectedClip.track);
+        console.log('移動後:', newStartTime, newTrack);
         
-        this.selectedClip.startTime = Math.max(0, this.selectedClip.startTime);
-        this.selectedClip.track = Math.max(0, Math.min(this.selectedClip.track, this.trackCount - 1));
-        
-        this.dragStartX = x;
-        this.dragStartY = y;
+        // 新しい位置を設定（範囲制限あり）
+        this.selectedClip.startTime = Math.max(0, newStartTime);
+        this.selectedClip.track = Math.max(0, Math.min(newTrack, this.trackCount - 1));
         
         this.drawTimeline();
         this.updatePropertiesPanel();
@@ -2709,8 +2716,13 @@ class StarlitTimelineApp {
         if (!this.selectedClip || !this.boundingBoxCache) return;
         
         const rect = this.previewCanvas.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
+        
+        // CSSピクセルからキャンバスピクセルに変換
+        const scaleX = this.previewCanvas.width / rect.width;
+        const scaleY = this.previewCanvas.height / rect.height;
+        
+        const mouseX = (e.clientX - rect.left) * scaleX;
+        const mouseY = (e.clientY - rect.top) * scaleY;
         
         const handleSize = 10;
         const handleHitArea = 15; // クリック判定を少し広げる
@@ -2796,8 +2808,13 @@ class StarlitTimelineApp {
         if (!this.isPreviewDragging || !this.selectedClip) return;
         
         const rect = this.previewCanvas.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
+        
+        // CSSピクセルからキャンバスピクセルに変換
+        const scaleX = this.previewCanvas.width / rect.width;
+        const scaleY = this.previewCanvas.height / rect.height;
+        
+        const mouseX = (e.clientX - rect.left) * scaleX;
+        const mouseY = (e.clientY - rect.top) * scaleY;
         
         const dx = mouseX - this.previewDragStart.x;
         const dy = mouseY - this.previewDragStart.y;
