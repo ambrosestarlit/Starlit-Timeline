@@ -333,13 +333,13 @@ body {
     justify-content: center;
     border-bottom: 2px solid var(--chocolate-main);
     position: relative;
-    overflow: visible; /* バウンディングボックスがはみ出せるように */
+    overflow: hidden; /* 茶色い背景（preview-area）の範囲でクリップ */
 }
 
 .preview-container {
     position: relative;
     display: inline-block;
-    /* はみ出しを許容 */
+    /* プレビュー画面外（茶色い背景）へのはみ出しを許容 */
     overflow: visible;
 }
 
