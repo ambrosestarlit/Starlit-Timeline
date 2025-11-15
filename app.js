@@ -16,8 +16,8 @@ class StarlitTimelineApp {
         // キャンバス
         this.previewCanvas = document.getElementById('previewCanvas');
         this.previewCtx = this.previewCanvas.getContext('2d');
-        this.overlayCanvas = document.getElementById('overlayCanvas');
-        this.overlayCtx = this.overlayCanvas.getContext('2d');
+        this.overlayCanvas = document.getElementById('overlayCanvas'); // SVG要素
+        this.boundingBoxGroup = document.getElementById('boundingBoxGroup');
         this.timelineCanvas = document.getElementById('timelineCanvas');
         this.timelineCtx = this.timelineCanvas.getContext('2d');
         this.rulerCanvas = document.getElementById('rulerCanvas');
@@ -1811,8 +1811,10 @@ class StarlitTimelineApp {
         // エフェクト適用
         this.applyEffects();
         
-        // オーバーレイキャンバスをクリア
-        this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
+        // SVGオーバーレイをクリア
+        while (this.boundingBoxGroup.firstChild) {
+            this.boundingBoxGroup.removeChild(this.boundingBoxGroup.firstChild);
+        }
         
         // バウンディングボックスを描画（動画・画像・連番画像クリップを選択している場合のみ）
         if (this.selectedClip && activeClips.includes(this.selectedClip)) {
@@ -2732,9 +2734,8 @@ class StarlitTimelineApp {
         }
     }
     
-    // バウンディングボックスを描画
+    // バウンディングボックスを描画（SVG）
     drawBoundingBox(clip) {
-        const ctx = this.overlayCtx; // オーバーレイキャンバスに描画
         const localTime = this.currentTime - clip.startTime;
         
         // クリップの現在の変形値を取得
@@ -2795,21 +2796,25 @@ class StarlitTimelineApp {
         const scaledWidth = clipWidth * scale;
         const scaledHeight = clipHeight * scale;
         
-        ctx.save();
+        // キャンバス中心を基準に変形を適用
+        const centerX = this.previewCanvas.width / 2 + x;
+        const centerY = this.previewCanvas.height / 2 + y;
         
-        // キャンバス中心を基準に変形を適用（オーバーレイキャンバスのサイズを使用）
-        const centerX = this.overlayCanvas.width / 2 + x;
-        const centerY = this.overlayCanvas.height / 2 + y;
+        // SVGグループを作成して変形を適用
+        const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        group.setAttribute('transform', `translate(${centerX}, ${centerY}) rotate(${rotation})`);
         
-        ctx.translate(centerX, centerY);
-        ctx.rotate(rotation * Math.PI / 180);
-        
-        // バウンディングボックスを描画
-        ctx.strokeStyle = '#00D9FF'; // 明るい青色
-        ctx.lineWidth = 2;
-        ctx.setLineDash([5, 5]);
-        ctx.strokeRect(-scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
-        ctx.setLineDash([]);
+        // バウンディングボックスの矩形を描画
+        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('x', -scaledWidth / 2);
+        rect.setAttribute('y', -scaledHeight / 2);
+        rect.setAttribute('width', scaledWidth);
+        rect.setAttribute('height', scaledHeight);
+        rect.setAttribute('fill', 'none');
+        rect.setAttribute('stroke', '#00D9FF');
+        rect.setAttribute('stroke-width', '2');
+        rect.setAttribute('stroke-dasharray', '5,5');
+        group.appendChild(rect);
         
         // ハンドルを描画
         const handleSize = 10;
@@ -2824,13 +2829,16 @@ class StarlitTimelineApp {
             { x: -scaledWidth / 2, y: 0, type: 'edge-l' }                     // 左
         ];
         
-        ctx.fillStyle = '#00D9FF';
-        ctx.strokeStyle = '#FFFFFF';
-        ctx.lineWidth = 1;
-        
         handles.forEach(handle => {
-            ctx.fillRect(handle.x - handleSize / 2, handle.y - handleSize / 2, handleSize, handleSize);
-            ctx.strokeRect(handle.x - handleSize / 2, handle.y - handleSize / 2, handleSize, handleSize);
+            const handleRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            handleRect.setAttribute('x', handle.x - handleSize / 2);
+            handleRect.setAttribute('y', handle.y - handleSize / 2);
+            handleRect.setAttribute('width', handleSize);
+            handleRect.setAttribute('height', handleSize);
+            handleRect.setAttribute('fill', '#00D9FF');
+            handleRect.setAttribute('stroke', '#FFFFFF');
+            handleRect.setAttribute('stroke-width', '1');
+            group.appendChild(handleRect);
         });
         
         // 回転ハンドル（上部中央から少し離れた位置）
@@ -2839,23 +2847,26 @@ class StarlitTimelineApp {
         const rotateY = -scaledHeight / 2 - rotateHandleDistance;
         
         // 回転ハンドルへの線
-        ctx.strokeStyle = '#00D9FF';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(0, -scaledHeight / 2);
-        ctx.lineTo(rotateX, rotateY);
-        ctx.stroke();
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', 0);
+        line.setAttribute('y1', -scaledHeight / 2);
+        line.setAttribute('x2', rotateX);
+        line.setAttribute('y2', rotateY);
+        line.setAttribute('stroke', '#00D9FF');
+        line.setAttribute('stroke-width', '2');
+        group.appendChild(line);
         
         // 回転ハンドル（円形）
-        ctx.fillStyle = '#00D9FF';
-        ctx.strokeStyle = '#FFFFFF';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(rotateX, rotateY, handleSize / 2, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', rotateX);
+        circle.setAttribute('cy', rotateY);
+        circle.setAttribute('r', handleSize / 2);
+        circle.setAttribute('fill', '#00D9FF');
+        circle.setAttribute('stroke', '#FFFFFF');
+        circle.setAttribute('stroke-width', '2');
+        group.appendChild(circle);
         
-        ctx.restore();
+        this.boundingBoxGroup.appendChild(group);
         
         // バウンディングボックス情報をキャッシュ（マウス操作で使用）
         this.boundingBoxCache = {

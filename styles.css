@@ -333,10 +333,18 @@ body {
     justify-content: center;
     border-bottom: 2px solid var(--chocolate-main);
     position: relative;
-    overflow: auto;
+    overflow: visible; /* バウンディングボックスがはみ出せるように */
+}
+
+.preview-container {
+    position: relative;
+    display: inline-block;
+    /* はみ出しを許容 */
+    overflow: visible;
 }
 
 #previewCanvas {
+    display: block;
     max-width: none;
     max-height: none;
     width: 800px;
@@ -349,12 +357,13 @@ body {
 
 #overlayCanvas {
     position: absolute;
-    max-width: none;
-    max-height: none;
+    top: 0;
+    left: 0;
     width: 800px;
     height: 450px;
     pointer-events: none;
-    border-radius: 8px;
+    /* SVGははみ出しを表示できる */
+    overflow: visible;
 }
 
 .preview-controls {

@@ -83,8 +83,12 @@
             <div class="center-area">
                 <!-- プレビューエリア -->
                 <div class="preview-area">
-                    <canvas id="previewCanvas" width="1920" height="1080"></canvas>
-                    <canvas id="overlayCanvas" width="1920" height="1080"></canvas>
+                    <div class="preview-container">
+                        <canvas id="previewCanvas" width="1920" height="1080"></canvas>
+                        <svg id="overlayCanvas" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid meet">
+                            <g id="boundingBoxGroup"></g>
+                        </svg>
+                    </div>
                     <div class="preview-controls">
                         <div class="time-display" id="timeDisplay">00:00:00.000</div>
                         <div class="resolution-display">1920 x 1080</div>
