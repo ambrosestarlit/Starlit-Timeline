@@ -125,6 +125,9 @@ class StarlitTimelineApp {
         
         // シークバー(プレイヘッド)画像を読み込み
         this.seekbarImage = new Image();
+        this.seekbarImage.onload = () => {
+            this.drawTimeline(); // 画像読み込み完了後に再描画
+        };
         this.seekbarImage.src = 'seekbar.png';
         
         // キーフレーム操作用
@@ -989,26 +992,18 @@ class StarlitTimelineApp {
         ctx.lineTo(x, this.timelineCanvas.height);
         ctx.stroke();
         
-        // プレイヘッドトップ(くま画像)
-        const bearSize = 28; // くま画像のサイズ(少し大きめ)
+        // プレイヘッドトップ(くま画像のみ、三角形は表示しない)
+        const bearSize = 36; // くま画像のサイズ(大きめ)
         if (this.seekbarImage && this.seekbarImage.complete) {
             ctx.drawImage(
                 this.seekbarImage,
                 x - bearSize / 2,
-                -2, // 少し上に配置
+                -4, // 少し上に配置
                 bearSize,
                 bearSize
             );
-        } else {
-            // フォールバック: 赤い三角形
-            ctx.fillStyle = '#FF0000';
-            ctx.beginPath();
-            ctx.moveTo(x - 8, 0);
-            ctx.lineTo(x + 8, 0);
-            ctx.lineTo(x, 12);
-            ctx.closePath();
-            ctx.fill();
         }
+        // 三角形のフォールバックは削除 - くまが読み込まれるまで何も表示しない
     }
     
     drawRuler() {
@@ -1055,8 +1050,8 @@ class StarlitTimelineApp {
         
         // プレイヘッド(くま)のクリック判定(上部40pxの範囲)
         const playheadX = this.currentTime * this.zoom;
-        const bearSize = 28;
-        const hitArea = 20; // 当たり判定を広く
+        const bearSize = 36;
+        const hitArea = 25; // 当たり判定を広く
         
         if (y < 40 && Math.abs(x - playheadX) < hitArea) {
             console.log('プレイヘッドドラッグ開始');
