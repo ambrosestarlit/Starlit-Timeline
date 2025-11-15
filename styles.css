@@ -408,6 +408,28 @@ body {
     font-family: 'YDWbananaslipplus', sans-serif;
 }
 
+.fps-select {
+    padding: 6px 10px;
+    border-radius: 4px;
+    border: 1px solid var(--chocolate-dark);
+    background: var(--biscuit-main);
+    color: var(--chocolate-dark);
+    font-size: 16px;
+    font-family: 'YDWbananaslipplus', sans-serif;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.fps-select:hover {
+    background: var(--biscuit-light);
+    border-color: var(--chocolate-main);
+}
+
+.fps-select:focus {
+    outline: 2px solid var(--chocolate-main);
+    outline-offset: 2px;
+}
+
 .timeline-controls {
     background: var(--chocolate-dark);
     padding: 12px;

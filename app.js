@@ -1539,19 +1539,31 @@ class StarlitTimelineApp {
                 clip.videoElement = document.createElement('video');
                 clip.videoElement.src = clip.asset.url;
                 clip.videoElement.muted = true;
+                clip.videoElement.preload = 'auto';
+                
                 clip.videoElement.onloadeddata = () => {
                     clip.videoElement.currentTime = actualTime;
+                    // 動画が準備できたら描画
+                    if (clip.videoElement.readyState >= 2) {
+                        this.drawVideoOnCanvas(clip);
+                    }
+                    resolve();
                 };
+                
+                // タイムアウト処理
+                setTimeout(() => resolve(), 100);
             } else {
+                // currentTimeを更新
                 if (Math.abs(clip.videoElement.currentTime - actualTime) > 0.1) {
                     clip.videoElement.currentTime = actualTime;
                 }
-            }
-            
-            setTimeout(() => {
-                this.drawVideoOnCanvas(clip);
+                
+                // readyStateが準備できていれば即座に描画
+                if (clip.videoElement.readyState >= 2) {
+                    this.drawVideoOnCanvas(clip);
+                }
                 resolve();
-            }, 50);
+            }
         });
     }
     
@@ -1559,30 +1571,40 @@ class StarlitTimelineApp {
         const video = clip.videoElement;
         const ctx = this.previewCtx;
         
-        if (video.readyState >= 2) {
-            let drawWidth, drawHeight;
+        // 動画が十分に読み込まれているかチェック
+        // readyState: 0=HAVE_NOTHING, 1=HAVE_METADATA, 2=HAVE_CURRENT_DATA, 3=HAVE_FUTURE_DATA, 4=HAVE_ENOUGH_DATA
+        if (!video || video.readyState < 2) {
+            return; // 準備できていなければ何も描画しない
+        }
+        
+        let drawWidth, drawHeight;
+        
+        if (clip.useOriginalSize && clip.originalWidth && clip.originalHeight) {
+            // 原寸表示
+            drawWidth = clip.originalWidth;
+            drawHeight = clip.originalHeight;
+        } else {
+            // アスペクト比を維持してフィット
+            const aspectRatio = video.videoWidth / video.videoHeight;
             
-            if (clip.useOriginalSize && clip.originalWidth && clip.originalHeight) {
-                // 原寸表示
-                drawWidth = clip.originalWidth;
-                drawHeight = clip.originalHeight;
-            } else {
-                // アスペクト比を維持してフィット
-                const aspectRatio = video.videoWidth / video.videoHeight;
-                const maxWidth = 800;
-                const maxHeight = 600;
-                
-                drawWidth = maxWidth;
-                drawHeight = maxWidth / aspectRatio;
-                
-                if (drawHeight > maxHeight) {
-                    drawHeight = maxHeight;
-                    drawWidth = maxHeight * aspectRatio;
-                }
+            if (!aspectRatio || !isFinite(aspectRatio)) {
+                return; // アスペクト比が不正なら描画しない
             }
             
-            ctx.drawImage(video, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+            const maxWidth = 800;
+            const maxHeight = 600;
+            
+            drawWidth = maxWidth;
+            drawHeight = maxWidth / aspectRatio;
+            
+            if (drawHeight > maxHeight) {
+                drawHeight = maxHeight;
+                drawWidth = maxHeight * aspectRatio;
+            }
         }
+        
+        // 中央に描画（画像と同じ処理）
+        ctx.drawImage(video, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
     }
     
     applyEffects() {
@@ -1741,6 +1763,19 @@ class StarlitTimelineApp {
     }
     
     // UI操作
+    changeFPS(newFPS) {
+        this.fps = parseInt(newFPS);
+        console.log(`📹 FPSを${this.fps}に変更しました`);
+        
+        // 再生中の場合、フレームレートの変更を反映
+        if (this.isPlaying) {
+            this.pause();
+            this.play();
+        }
+        
+        this.showNotification(`📹 FPS: ${this.fps}`);
+    }
+    
     increaseTrackCount() {
         this.trackCount++;
         document.getElementById('trackCount').textContent = this.trackCount;
@@ -1994,6 +2029,14 @@ class StarlitTimelineApp {
                 
                 // プロジェクトデータを一時保存
                 this.pendingProject = project;
+                
+                // 設定を復元
+                if (project.settings) {
+                    if (project.settings.fps) {
+                        this.fps = project.settings.fps;
+                        document.getElementById('fpsSelect').value = this.fps;
+                    }
+                }
                 
                 // エフェクトのenabledフラグのみ復元（パラメーターはlocalStorageから既に読み込み済み）
                 if (project.effectsEnabled) {
