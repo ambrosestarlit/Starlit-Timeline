@@ -127,6 +127,7 @@ class StarlitTimelineApp {
         this.seekbarImage = new Image();
         this.seekbarImage.onload = () => {
             this.drawTimeline(); // 画像読み込み完了後に再描画
+            this.drawRuler();    // ルーラーも再描画してくまを表示
         };
         this.seekbarImage.src = 'seekbar.png';
         
@@ -984,7 +985,7 @@ class StarlitTimelineApp {
         const ctx = this.timelineCtx;
         const x = this.currentTime * this.zoom;
         
-        // 赤いライン
+        // 赤いライン(タイムラインキャンバスに描画)
         ctx.strokeStyle = '#FF0000';
         ctx.lineWidth = 2;
         ctx.beginPath();
@@ -992,18 +993,7 @@ class StarlitTimelineApp {
         ctx.lineTo(x, this.timelineCanvas.height);
         ctx.stroke();
         
-        // プレイヘッドトップ(くま画像のみ、三角形は表示しない)
-        const bearSize = 36; // くま画像のサイズ(大きめ)
-        if (this.seekbarImage && this.seekbarImage.complete) {
-            ctx.drawImage(
-                this.seekbarImage,
-                x - bearSize / 2,
-                -4, // 少し上に配置
-                bearSize,
-                bearSize
-            );
-        }
-        // 三角形のフォールバックは削除 - くまが読み込まれるまで何も表示しない
+        // くまはルーラー側に描画するのでここでは描画しない
     }
     
     drawRuler() {
@@ -1034,6 +1024,20 @@ class StarlitTimelineApp {
             const seconds = t % 60;
             const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
             ctx.fillText(timeStr, x + 2, height - 12);
+        }
+        
+        // シークバー(くま)をルーラー上に描画
+        const playheadX = this.currentTime * this.zoom - scrollLeft;
+        const bearSize = 36;
+        
+        if (this.seekbarImage && this.seekbarImage.complete) {
+            ctx.drawImage(
+                this.seekbarImage,
+                playheadX - bearSize / 2,
+                -6, // ルーラーの上に突き出す
+                bearSize,
+                bearSize
+            );
         }
     }
     
