@@ -123,6 +123,10 @@ class StarlitTimelineApp {
         this.keyframeImage = new Image();
         this.keyframeImage.src = 'key.png';
         
+        // シークバー(プレイヘッド)画像を読み込み
+        this.seekbarImage = new Image();
+        this.seekbarImage.src = 'seekbar.png';
+        
         // キーフレーム操作用
         this.isDraggingKeyframe = false;
         this.draggingKeyframe = null; // {clip, property, index}
@@ -977,6 +981,7 @@ class StarlitTimelineApp {
         const ctx = this.timelineCtx;
         const x = this.currentTime * this.zoom;
         
+        // 赤いライン
         ctx.strokeStyle = '#FF0000';
         ctx.lineWidth = 2;
         ctx.beginPath();
@@ -984,14 +989,26 @@ class StarlitTimelineApp {
         ctx.lineTo(x, this.timelineCanvas.height);
         ctx.stroke();
         
-        // プレイヘッドトップ
-        ctx.fillStyle = '#FF0000';
-        ctx.beginPath();
-        ctx.moveTo(x - 8, 0);
-        ctx.lineTo(x + 8, 0);
-        ctx.lineTo(x, 12);
-        ctx.closePath();
-        ctx.fill();
+        // プレイヘッドトップ(くま画像)
+        const bearSize = 28; // くま画像のサイズ(少し大きめ)
+        if (this.seekbarImage && this.seekbarImage.complete) {
+            ctx.drawImage(
+                this.seekbarImage,
+                x - bearSize / 2,
+                -2, // 少し上に配置
+                bearSize,
+                bearSize
+            );
+        } else {
+            // フォールバック: 赤い三角形
+            ctx.fillStyle = '#FF0000';
+            ctx.beginPath();
+            ctx.moveTo(x - 8, 0);
+            ctx.lineTo(x + 8, 0);
+            ctx.lineTo(x, 12);
+            ctx.closePath();
+            ctx.fill();
+        }
     }
     
     drawRuler() {
@@ -1035,6 +1052,21 @@ class StarlitTimelineApp {
         const y = e.clientY - rect.top + scrollContainer.scrollTop;
         
         console.log('座標:', x, y);
+        
+        // プレイヘッド(くま)のクリック判定(上部40pxの範囲)
+        const playheadX = this.currentTime * this.zoom;
+        const bearSize = 28;
+        const hitArea = 20; // 当たり判定を広く
+        
+        if (y < 40 && Math.abs(x - playheadX) < hitArea) {
+            console.log('プレイヘッドドラッグ開始');
+            this.isSeekbarDragging = true;
+            this.currentTime = x / this.zoom;
+            this.updateTimeDisplay();
+            this.updatePreview();
+            this.drawTimeline();
+            return;
+        }
         
         // 右クリックの場合、キーフレーム削除をチェック
         if (e.button === 2) {
