@@ -16,6 +16,8 @@ class StarlitTimelineApp {
         // キャンバス
         this.previewCanvas = document.getElementById('previewCanvas');
         this.previewCtx = this.previewCanvas.getContext('2d');
+        this.overlayCanvas = document.getElementById('overlayCanvas');
+        this.overlayCtx = this.overlayCanvas.getContext('2d');
         this.timelineCanvas = document.getElementById('timelineCanvas');
         this.timelineCtx = this.timelineCanvas.getContext('2d');
         this.rulerCanvas = document.getElementById('rulerCanvas');
@@ -387,6 +389,8 @@ class StarlitTimelineApp {
         const zoomFactor = this.previewZoom / 100;
         this.previewCanvas.style.transform = `scale(${zoomFactor})`;
         this.previewCanvas.style.transformOrigin = 'center center';
+        this.overlayCanvas.style.transform = `scale(${zoomFactor})`;
+        this.overlayCanvas.style.transformOrigin = 'center center';
     }
     
     // ディフュージョンキーフレーム追加
@@ -1807,6 +1811,9 @@ class StarlitTimelineApp {
         // エフェクト適用
         this.applyEffects();
         
+        // オーバーレイキャンバスをクリア
+        this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
+        
         // バウンディングボックスを描画（動画・画像・連番画像クリップを選択している場合のみ）
         if (this.selectedClip && activeClips.includes(this.selectedClip)) {
             const clipType = this.selectedClip.asset.type;
@@ -2727,7 +2734,7 @@ class StarlitTimelineApp {
     
     // バウンディングボックスを描画
     drawBoundingBox(clip) {
-        const ctx = this.previewCtx;
+        const ctx = this.overlayCtx; // オーバーレイキャンバスに描画
         const localTime = this.currentTime - clip.startTime;
         
         // クリップの現在の変形値を取得
@@ -2790,9 +2797,9 @@ class StarlitTimelineApp {
         
         ctx.save();
         
-        // キャンバス中心を基準に変形を適用
-        const centerX = this.previewCanvas.width / 2 + x;
-        const centerY = this.previewCanvas.height / 2 + y;
+        // キャンバス中心を基準に変形を適用（オーバーレイキャンバスのサイズを使用）
+        const centerX = this.overlayCanvas.width / 2 + x;
+        const centerY = this.overlayCanvas.height / 2 + y;
         
         ctx.translate(centerX, centerY);
         ctx.rotate(rotation * Math.PI / 180);

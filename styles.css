@@ -347,6 +347,16 @@ body {
     transition: transform 0.2s ease;
 }
 
+#overlayCanvas {
+    position: absolute;
+    max-width: none;
+    max-height: none;
+    width: 800px;
+    height: 450px;
+    pointer-events: none;
+    border-radius: 8px;
+}
+
 .preview-controls {
     position: absolute;
     bottom: 25px;
