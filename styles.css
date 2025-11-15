@@ -569,12 +569,16 @@ body {
 .timeline-ruler {
     background: var(--biscuit-main);
     height: 30px;
-    overflow: hidden;
+    overflow: visible; /* くまがはみ出すのを許可 */
+    position: relative;
+    z-index: 100; /* タイムラインより前面に */
 }
 
 #rulerCanvas {
     width: 100%;
     display: block;
+    position: relative;
+    z-index: 101; /* さらに前面に */
 }
 
 /* タイムラインスクロールエリア */
