@@ -2041,7 +2041,8 @@ class StarlitTimelineApp {
                     
                     const promise = zipEntry.async('blob').then(blob => {
                         const fileName = pathParts[pathParts.length - 1];
-                        const file = new File([blob], fileName, { type: blob.type });
+                        const mimeType = this.getMimeTypeFromFileName(fileName);
+                        const file = new File([blob], fileName, { type: mimeType });
                         sequenceFolders.get(folderName).push(file);
                     });
                     filePromises.push(promise);
@@ -2050,7 +2051,8 @@ class StarlitTimelineApp {
                     // 通常ファイル
                     const fileName = pathParts[0];
                     const promise = zipEntry.async('blob').then(blob => {
-                        const file = new File([blob], fileName, { type: blob.type });
+                        const mimeType = this.getMimeTypeFromFileName(fileName);
+                        const file = new File([blob], fileName, { type: mimeType });
                         this.addAsset(file);
                     });
                     filePromises.push(promise);
@@ -2081,6 +2083,38 @@ class StarlitTimelineApp {
         
         // ファイル入力をリセット
         event.target.value = '';
+    }
+    
+    // ファイル名からMIMEタイプを取得
+    getMimeTypeFromFileName(fileName) {
+        const ext = fileName.split('.').pop().toLowerCase();
+        
+        const mimeTypes = {
+            // 画像
+            'png': 'image/png',
+            'jpg': 'image/jpeg',
+            'jpeg': 'image/jpeg',
+            'gif': 'image/gif',
+            'webp': 'image/webp',
+            'bmp': 'image/bmp',
+            'svg': 'image/svg+xml',
+            
+            // 動画
+            'mp4': 'video/mp4',
+            'webm': 'video/webm',
+            'ogg': 'video/ogg',
+            'mov': 'video/quicktime',
+            'avi': 'video/x-msvideo',
+            
+            // 音声
+            'mp3': 'audio/mpeg',
+            'wav': 'audio/wav',
+            'ogg': 'audio/ogg',
+            'flac': 'audio/flac',
+            'm4a': 'audio/mp4'
+        };
+        
+        return mimeTypes[ext] || 'application/octet-stream';
     }
     
     // プロジェクトデータからクリップを復元
