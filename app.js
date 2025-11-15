@@ -4243,6 +4243,11 @@ class StarlitTimelineApp {
             updateProgress('録画開始...');
             
             const originalTime = this.currentTime;
+            const originalSelectedClip = this.selectedClip; // 選択状態を保存
+            
+            // 書き出し中は選択を解除してバウンディングボックスを非表示
+            this.selectedClip = null;
+            
             const frameInterval = 1000 / this.fps; // ミリ秒
             let currentFrame = 0;
             
@@ -4253,6 +4258,8 @@ class StarlitTimelineApp {
                     updateProgress('エンコード中...');
                     setTimeout(() => {
                         recorder.stop();
+                        // 選択状態を復元
+                        this.selectedClip = originalSelectedClip;
                     }, 500); // 最後のフレームを確実にキャプチャ
                     return;
                 }
@@ -4319,6 +4326,10 @@ class StarlitTimelineApp {
         document.body.appendChild(progressDiv);
         
         const originalTime = this.currentTime;
+        const originalSelectedClip = this.selectedClip; // 選択状態を保存
+        
+        // 書き出し中は選択を解除してバウンディングボックスを非表示
+        this.selectedClip = null;
         
         // JSZipライブラリを動的に読み込み
         if (typeof JSZip === 'undefined') {
@@ -4352,7 +4363,9 @@ class StarlitTimelineApp {
             await new Promise(resolve => setTimeout(resolve, 10));
         }
         
+        // 元の状態に戻す
         this.currentTime = originalTime;
+        this.selectedClip = originalSelectedClip; // 選択状態を復元
         this.updatePreview();
         
         // ZIP圧縮
