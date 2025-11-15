@@ -195,9 +195,11 @@ class StarlitTimelineApp {
         // 定規のクリック/ドラッグイベント
         this.rulerCanvas.addEventListener('mousedown', (e) => this.handleRulerMouseDown(e));
         
-        // プレビューキャンバスでの直感的操作
-        this.previewCanvas.addEventListener('mousedown', (e) => this.handlePreviewMouseDown(e));
-        this.previewCanvas.addEventListener('mousemove', (e) => this.handlePreviewCanvasHover(e));
+        // プレビューエリア全体で直感的操作（画面外でも操作可能）
+        this.previewArea = document.getElementById('previewArea');
+        this.previewContainer = document.getElementById('previewContainer');
+        this.previewArea.addEventListener('mousedown', (e) => this.handlePreviewMouseDown(e));
+        this.previewArea.addEventListener('mousemove', (e) => this.handlePreviewCanvasHover(e));
         document.addEventListener('mousemove', (e) => this.handlePreviewMouseMove(e));
         document.addEventListener('mouseup', (e) => this.handlePreviewMouseUp(e));
         
