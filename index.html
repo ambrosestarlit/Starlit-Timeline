@@ -263,7 +263,10 @@
     <input type="file" id="fileInput" multiple accept="image/*,video/*,audio/*" style="display: none;" onchange="app.handleFileSelect(event)">
     <input type="file" id="projectInput" accept=".json" style="display: none;" onchange="app.handleProjectLoad(event)">
     <input type="file" id="effectSettingsInput" accept=".json" style="display: none;" onchange="app.handleEffectSettingsLoad(event)">
+    <input type="file" id="assetsZipInput" accept=".zip" style="display: none;" onchange="app.handleAssetsZipLoad(event)">
 
+    <!-- JSZip ライブラリ -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

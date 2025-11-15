@@ -86,6 +86,9 @@ class StarlitTimelineApp {
             opacity: false
         };
         
+        // プロジェクト読み込み時の一時保存
+        this.pendingProject = null;
+        
         this.init();
     }
     
@@ -1876,15 +1879,22 @@ class StarlitTimelineApp {
     }
     
     // プロジェクト保存/読み込み
-    saveProject() {
+    async saveProject() {
+        // プロジェクト名を入力
+        const projectName = prompt('プロジェクト名を入力してください:', 'starlit_project');
+        if (!projectName) return; // キャンセルされた場合
+        
         const project = {
             version: '1.0',
+            projectName: projectName,
             clips: this.clips.map(clip => ({
                 ...clip,
                 asset: {
                     id: clip.asset.id,
                     name: clip.asset.name,
-                    type: clip.asset.type
+                    type: clip.asset.type,
+                    // 連番の場合はフレーム数も保存
+                    ...(clip.asset.type === 'sequence' ? { frameCount: clip.asset.frameCount } : {})
                 }
             })),
             // エフェクトのenabledフラグのみ保存（パラメーターはlocalStorageに保存済み）
@@ -1902,12 +1912,54 @@ class StarlitTimelineApp {
             }
         };
         
-        const blob = new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'starlit_project.json';
-        a.click();
+        // プロジェクトJSONを保存
+        const projectBlob = new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' });
+        const projectUrl = URL.createObjectURL(projectBlob);
+        const projectLink = document.createElement('a');
+        projectLink.href = projectUrl;
+        projectLink.download = `${projectName}.json`;
+        projectLink.click();
+        URL.revokeObjectURL(projectUrl);
+        
+        // 素材ZIPを生成して保存
+        this.showNotification('📦 素材をZIPに圧縮中...');
+        await this.saveAssetsZip(projectName);
+        this.showNotification('✅ プロジェクトと素材を保存しました！');
+    }
+    
+    // 素材をZIPで保存
+    async saveAssetsZip(projectName) {
+        if (this.assets.length === 0) {
+            this.showNotification('⚠️ 保存する素材がありません');
+            return;
+        }
+        
+        const zip = new JSZip();
+        const assetsFolder = zip.folder('assets');
+        
+        // 各素材をZIPに追加
+        for (const asset of this.assets) {
+            if (asset.type === 'sequence') {
+                // 連番画像の場合、フォルダを作成
+                const sequenceFolder = assetsFolder.folder(asset.name.replace(' (連番)', ''));
+                for (let i = 0; i < asset.files.length; i++) {
+                    const file = asset.files[i];
+                    sequenceFolder.file(file.name, file);
+                }
+            } else {
+                // 通常ファイル
+                assetsFolder.file(asset.name, asset.file);
+            }
+        }
+        
+        // ZIPを生成してダウンロード
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        const zipUrl = URL.createObjectURL(zipBlob);
+        const zipLink = document.createElement('a');
+        zipLink.href = zipUrl;
+        zipLink.download = `${projectName}_assets.zip`;
+        zipLink.click();
+        URL.revokeObjectURL(zipUrl);
     }
     
     openProject() {
@@ -1923,6 +1975,9 @@ class StarlitTimelineApp {
             try {
                 const project = JSON.parse(e.target.result);
                 
+                // プロジェクトデータを一時保存
+                this.pendingProject = project;
+                
                 // エフェクトのenabledフラグのみ復元（パラメーターはlocalStorageから既に読み込み済み）
                 if (project.effectsEnabled) {
                     this.effects.letterbox.enabled = project.effectsEnabled.letterbox || false;
@@ -1933,12 +1988,132 @@ class StarlitTimelineApp {
                 this.updateEffectUI();
                 this.updatePreview();
                 
-                alert('プロジェクトを読み込みました(素材は再インポートが必要です)');
+                // 素材ZIP読み込みを促す
+                const projectName = project.projectName || 'プロジェクト';
+                if (confirm(`プロジェクト「${projectName}」を読み込みました。\n\n続いて素材ZIPファイル（${projectName}_assets.zip）を選択してください。`)) {
+                    document.getElementById('assetsZipInput').click();
+                } else {
+                    this.showNotification('⚠️ 素材なしでプロジェクトを読み込みました');
+                    this.pendingProject = null;
+                }
+                
             } catch (err) {
-                alert('プロジェクトの読み込みに失敗しました');
+                alert('プロジェクトの読み込みに失敗しました:\n' + err.message);
             }
         };
         reader.readAsText(file);
+    }
+    
+    // 素材ZIPを読み込み
+    async handleAssetsZipLoad(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        
+        try {
+            this.showNotification('📦 素材ZIPを展開中...');
+            
+            const zip = await JSZip.loadAsync(file);
+            const assetsFolder = zip.folder('assets');
+            
+            if (!assetsFolder) {
+                throw new Error('ZIPファイル内にassetsフォルダが見つかりません');
+            }
+            
+            // 素材をクリア
+            this.assets = [];
+            
+            // 連番画像を格納するマップ
+            const sequenceFolders = new Map();
+            
+            // ZIPから素材を復元
+            const filePromises = [];
+            assetsFolder.forEach((relativePath, zipEntry) => {
+                if (zipEntry.dir) return; // ディレクトリはスキップ
+                
+                const pathParts = relativePath.split('/');
+                
+                if (pathParts.length > 1) {
+                    // 連番画像（フォルダ内のファイル）
+                    const folderName = pathParts[0];
+                    if (!sequenceFolders.has(folderName)) {
+                        sequenceFolders.set(folderName, []);
+                    }
+                    
+                    const promise = zipEntry.async('blob').then(blob => {
+                        const fileName = pathParts[pathParts.length - 1];
+                        const file = new File([blob], fileName, { type: blob.type });
+                        sequenceFolders.get(folderName).push(file);
+                    });
+                    filePromises.push(promise);
+                    
+                } else {
+                    // 通常ファイル
+                    const fileName = pathParts[0];
+                    const promise = zipEntry.async('blob').then(blob => {
+                        const file = new File([blob], fileName, { type: blob.type });
+                        this.addAsset(file);
+                    });
+                    filePromises.push(promise);
+                }
+            });
+            
+            // すべてのファイルを読み込み完了まで待つ
+            await Promise.all(filePromises);
+            
+            // 連番画像を追加
+            for (const [folderName, files] of sequenceFolders) {
+                files.sort((a, b) => a.name.localeCompare(b.name));
+                this.addSequenceAsset(files);
+            }
+            
+            // プロジェクトデータからクリップを復元
+            if (this.pendingProject) {
+                await this.restoreClipsFromProject(this.pendingProject);
+                this.pendingProject = null;
+            }
+            
+            this.showNotification('✅ 素材を復元しました！');
+            this.renderAssets();
+            
+        } catch (err) {
+            alert('素材ZIPの読み込みに失敗しました:\n' + err.message);
+        }
+        
+        // ファイル入力をリセット
+        event.target.value = '';
+    }
+    
+    // プロジェクトデータからクリップを復元
+    async restoreClipsFromProject(project) {
+        // クリップをクリア
+        this.clips = [];
+        
+        // クリップを復元
+        for (const clipData of project.clips) {
+            // 素材を名前で検索
+            const asset = this.assets.find(a => a.name === clipData.asset.name);
+            
+            if (!asset) {
+                console.warn(`素材が見つかりません: ${clipData.asset.name}`);
+                continue;
+            }
+            
+            // クリップを復元
+            const clip = {
+                ...clipData,
+                asset: asset
+            };
+            
+            // 音声素材の場合、AudioElementを準備
+            if (asset.type === 'audio') {
+                this.prepareAudioClip(clip);
+            }
+            
+            this.clips.push(clip);
+        }
+        
+        this.drawTimeline();
+        this.updatePreview();
     }
     
     newProject() {
