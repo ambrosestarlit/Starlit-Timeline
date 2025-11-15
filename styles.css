@@ -476,10 +476,10 @@ body {
 .styled-slider::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
-    width: 20px;
-    height: 20px;
-    background: var(--cocoa-color);
-    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    background: url('slider.png') center/contain no-repeat;
+    border-radius: 0;
     cursor: pointer;
 }
 
@@ -491,10 +491,10 @@ body {
 }
 
 .styled-slider::-moz-range-thumb {
-    width: 20px;
-    height: 20px;
-    background: var(--cocoa-color);
-    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    background: url('slider.png') center/contain no-repeat;
+    border-radius: 0;
     cursor: pointer;
     border: none;
 }
@@ -519,10 +519,10 @@ body {
 .effect-slider::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
-    width: 20px;
-    height: 20px;
-    background: var(--cocoa-color);
-    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    background: url('slider.png') center/contain no-repeat;
+    border-radius: 0;
     cursor: pointer;
 }
 
@@ -534,10 +534,10 @@ body {
 }
 
 .effect-slider::-moz-range-thumb {
-    width: 20px;
-    height: 20px;
-    background: var(--cocoa-color);
-    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    background: url('slider.png') center/contain no-repeat;
+    border-radius: 0;
     cursor: pointer;
     border: none;
 }
@@ -677,16 +677,16 @@ body {
 .property-slider::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
-    width: 18px;
-    height: 18px;
-    background: var(--cocoa-color);
-    border-radius: 50%;
+    width: 22px;
+    height: 22px;
+    background: url('slider.png') center/contain no-repeat;
+    border-radius: 0;
     cursor: pointer;
-    transition: background 0.2s;
+    transition: transform 0.2s;
 }
 
 .property-slider::-webkit-slider-thumb:hover {
-    background: var(--accent-orange);
+    transform: scale(1.1);
 }
 
 .property-slider::-moz-range-track {
@@ -697,17 +697,17 @@ body {
 }
 
 .property-slider::-moz-range-thumb {
-    width: 18px;
-    height: 18px;
-    background: var(--cocoa-color);
-    border-radius: 50%;
+    width: 22px;
+    height: 22px;
+    background: url('slider.png') center/contain no-repeat;
+    border-radius: 0;
     cursor: pointer;
     border: none;
-    transition: background 0.2s;
+    transition: transform 0.2s;
 }
 
 .property-slider::-moz-range-thumb:hover {
-    background: var(--accent-orange);
+    transform: scale(1.1);
 }
 
 .keyframe-controls {

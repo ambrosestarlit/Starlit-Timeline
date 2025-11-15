@@ -1714,19 +1714,21 @@ class StarlitTimelineApp {
         
         try {
             const { FFmpeg } = FFmpegWASM;
-            const { fetchFile, toBlobURL } = FFmpegUtil;
+            const { toBlobURL } = FFmpegUtil;
             
             this.ffmpeg = new FFmpeg();
             
-            const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+            // jsdelivr CDN を使用（CORS対応）
+            const baseURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd';
             
             this.ffmpeg.on('log', ({ message }) => {
                 console.log('[FFmpeg]', message);
             });
             
+            // CORSエラーを回避するため、toBlobURLを使わずに直接読み込み
             await this.ffmpeg.load({
-                coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-                wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+                coreURL: `${baseURL}/ffmpeg-core.js`,
+                wasmURL: `${baseURL}/ffmpeg-core.wasm`,
             });
             
             this.ffmpegLoaded = true;
