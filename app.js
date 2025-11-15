@@ -2570,18 +2570,6 @@ class StarlitTimelineApp {
         
         const localTime = this.currentTime - this.selectedClip.startTime;
         
-        // 方向待ちの場合、移動量が閾値を超えたらモードを確定
-        if (this.previewDragMode === 'waitingForDirection') {
-            const threshold = 5; // ピクセル
-            if (Math.abs(dx) > threshold || Math.abs(dy) > threshold) {
-                if (Math.abs(dx) > Math.abs(dy)) {
-                    this.previewDragMode = 'rotation'; // 左右ドラッグ: 回転
-                } else {
-                    this.previewDragMode = 'scale'; // 上下ドラッグ: スケール
-                }
-            }
-        }
-        
         if (this.previewDragMode === 'position') {
             // 通常ドラッグ: 位置移動
             const newX = this.initialTransform.x + dx;
@@ -2601,6 +2589,25 @@ class StarlitTimelineApp {
             const scaleDelta = -dy * 0.005; // 上にドラッグで拡大
             const newScale = Math.max(0.1, this.initialTransform.scale + scaleDelta);
             this.updateClipProperty('scale', newScale);
+            
+        } else if (this.previewDragMode === 'waitingForDirection') {
+            // 方向待ち中も移動量から即座に判定して処理
+            const threshold = 5; // ピクセル
+            if (Math.abs(dx) > threshold || Math.abs(dy) > threshold) {
+                if (Math.abs(dx) > Math.abs(dy)) {
+                    // 左右優位: 回転
+                    this.previewDragMode = 'rotation';
+                    const rotationDelta = dx * 0.5;
+                    const newRotation = this.initialTransform.rotation + rotationDelta;
+                    this.updateClipProperty('rotation', newRotation);
+                } else {
+                    // 上下優位: スケール
+                    this.previewDragMode = 'scale';
+                    const scaleDelta = -dy * 0.005;
+                    const newScale = Math.max(0.1, this.initialTransform.scale + scaleDelta);
+                    this.updateClipProperty('scale', newScale);
+                }
+            }
         }
         
         this.updatePreview();
