@@ -116,6 +116,12 @@ class StarlitTimelineApp {
         this.previewDragMode = null; // 'position', 'rotation', 'scale'
         this.initialTransform = null;
         
+        // プレビューズーム機能
+        this.previewZoom = 100; // パーセント表示（100% = 原寸）
+        
+        // スポイトモード
+        this.eyedropperMode = false;
+        
         // FFmpeg.wasm for MP4 export
         this.ffmpeg = null;
         this.ffmpegLoaded = false;
@@ -140,6 +146,13 @@ class StarlitTimelineApp {
             this.updateTimelineSize();
             this.drawTimeline();
             this.drawRuler();
+        });
+        
+        // プレビューズームスライダー
+        document.getElementById('previewZoomSlider').addEventListener('input', (e) => {
+            this.previewZoom = parseInt(e.target.value);
+            document.getElementById('previewZoomValue').textContent = `${this.previewZoom}%`;
+            this.updatePreviewZoom();
         });
         
         // エフェクトコントロール
@@ -300,36 +313,58 @@ class StarlitTimelineApp {
     
     // スポイト機能（プレビューキャンバスから色を取得）
     pickColorFromCanvas() {
-        if (!confirm('プレビュー画面の中央の色を取得します。よろしいですか？')) {
-            return;
-        }
+        // スポイトモードを有効化
+        this.eyedropperMode = true;
+        this.showNotification('💉 プレビュー画面をクリックして色を取得してください');
         
-        const ctx = this.previewCtx;
-        const width = this.previewCanvas.width;
-        const height = this.previewCanvas.height;
+        // プレビューキャンバスのカーソルを変更
+        this.previewCanvas.style.cursor = 'crosshair';
         
-        // 中央のピクセルを取得
-        const x = Math.floor(width / 2);
-        const y = Math.floor(height / 2);
+        // 一時的なクリックイベントリスナーを追加
+        const eyedropperClick = (e) => {
+            const rect = this.previewCanvas.getBoundingClientRect();
+            
+            // CSSピクセルからキャンバスピクセルに変換
+            const scaleX = this.previewCanvas.width / rect.width;
+            const scaleY = this.previewCanvas.height / rect.height;
+            
+            const canvasX = Math.floor((e.clientX - rect.left) * scaleX);
+            const canvasY = Math.floor((e.clientY - rect.top) * scaleY);
+            
+            // ピクセルの色を取得
+            const imageData = this.previewCtx.getImageData(canvasX, canvasY, 1, 1);
+            const data = imageData.data;
+            
+            const r = data[0];
+            const g = data[1];
+            const b = data[2];
+            
+            // RGBをHEXに変換
+            const hex = '#' + [r, g, b].map(x => {
+                const hex = x.toString(16);
+                return hex.length === 1 ? '0' + hex : hex;
+            }).join('');
+            
+            // カラーピッカーに設定
+            document.getElementById('colorKeyColor').value = hex;
+            this.updateColorKeyEffect();
+            
+            this.showNotification(`🎨 色を取得しました: ${hex}`);
+            
+            // スポイトモードを終了
+            this.eyedropperMode = false;
+            this.previewCanvas.style.cursor = 'default';
+            this.previewCanvas.removeEventListener('click', eyedropperClick);
+        };
         
-        const imageData = ctx.getImageData(x, y, 1, 1);
-        const data = imageData.data;
-        
-        const r = data[0];
-        const g = data[1];
-        const b = data[2];
-        
-        // RGBをHEXに変換
-        const hex = '#' + [r, g, b].map(x => {
-            const hex = x.toString(16);
-            return hex.length === 1 ? '0' + hex : hex;
-        }).join('');
-        
-        // カラーピッカーに設定
-        document.getElementById('colorKeyColor').value = hex;
-        this.updateColorKeyEffect();
-        
-        this.showNotification(`🎨 色を取得しました: ${hex}`);
+        this.previewCanvas.addEventListener('click', eyedropperClick, { once: true });
+    }
+    
+    // プレビューズームを更新
+    updatePreviewZoom() {
+        const zoomFactor = this.previewZoom / 100;
+        this.previewCanvas.style.transform = `scale(${zoomFactor})`;
+        this.previewCanvas.style.transformOrigin = 'center center';
     }
     
     // ディフュージョンキーフレーム追加
