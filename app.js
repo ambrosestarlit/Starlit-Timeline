@@ -205,6 +205,11 @@ class StarlitTimelineApp {
         timelineScroll.addEventListener('drop', (e) => this.handleAssetDrop(e));
         timelineScroll.addEventListener('dragover', (e) => e.preventDefault());
         
+        // タイムラインスクロール時にルーラーを再描画(くまを追従させる)
+        timelineScroll.addEventListener('scroll', () => {
+            this.drawRuler();
+        });
+        
         // キーボードショートカット
         document.addEventListener('keydown', (e) => this.handleKeyDown(e));
         
