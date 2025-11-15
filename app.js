@@ -737,8 +737,8 @@ class StarlitTimelineApp {
             clip.frameRate = 30; // デフォルト30fps
         }
         
-        // 音声素材の場合、AudioElementを準備
-        if (asset.type === 'audio') {
+        // 音声素材または動画素材の場合、AudioElementを準備
+        if (asset.type === 'audio' || asset.type === 'video') {
             this.prepareAudioClip(clip);
         }
         
@@ -778,18 +778,26 @@ class StarlitTimelineApp {
             return;
         }
         
+        // 動画の場合は音声専用のaudioElementを作成（videoElementは映像用でmuted）
+        // 音声クリップの場合は通常のaudioElementを作成
         clip.audioElement = new Audio(clip.asset.url);
         clip.audioElement.preload = 'auto';
         
-        // Web Audio APIのノードを作成
-        clip.audioSource = this.audioContext.createMediaElementSource(clip.audioElement);
-        clip.gainNode = this.audioContext.createGain();
-        clip.panNode = this.audioContext.createStereoPanner();
-        
-        // ノードを接続: audioSource → panNode → gainNode → destination
-        clip.audioSource.connect(clip.panNode);
-        clip.panNode.connect(clip.gainNode);
-        clip.gainNode.connect(this.audioContext.destination);
+        try {
+            // Web Audio APIのノードを作成
+            clip.audioSource = this.audioContext.createMediaElementSource(clip.audioElement);
+            clip.gainNode = this.audioContext.createGain();
+            clip.panNode = this.audioContext.createStereoPanner();
+            
+            // ノードを接続: audioSource → panNode → gainNode → destination
+            clip.audioSource.connect(clip.panNode);
+            clip.panNode.connect(clip.gainNode);
+            clip.gainNode.connect(this.audioContext.destination);
+            
+            console.log('✅ 音声ノード作成成功:', clip.asset.name);
+        } catch (error) {
+            console.error('❌ 音声ノード作成エラー:', clip.asset.name, error);
+        }
     }
     
     // タイムライン描画
@@ -912,10 +920,8 @@ class StarlitTimelineApp {
         // トランジションインジケーター
         this.drawTransitionIndicators(clip, x, y, width, height);
         
-        // キーフレームインジケーター
-        if (clip.asset.type !== 'audio') {
-            this.drawKeyframeIndicators(clip, x, y, height);
-        }
+        // キーフレームインジケーター（全てのクリップタイプで表示）
+        this.drawKeyframeIndicators(clip, x, y, height);
         
         // 音声クリップの場合は波形表示
         if (clip.asset.type === 'audio') {
@@ -976,6 +982,11 @@ class StarlitTimelineApp {
     drawKeyframeIndicators(clip, clipX, clipY, clipHeight) {
         const ctx = this.timelineCtx;
         const keyframeSize = 16; // くま画像のサイズ
+        
+        // デバッグ: panキーフレームの確認
+        if (clip.keyframes.pan && clip.keyframes.pan.length > 0) {
+            console.log('🎚️ Pan keyframes for', clip.asset.name, ':', clip.keyframes.pan.length, 'keyframes');
+        }
         
         Object.keys(clip.keyframes).forEach(property => {
             const keyframes = clip.keyframes[property];
@@ -1740,6 +1751,10 @@ class StarlitTimelineApp {
         // 音量を変更した場合、gainNodeに反映
         if (property === 'volume' && this.selectedClip.gainNode) {
             this.selectedClip.gainNode.gain.value = value;
+            console.log('🔊 Volume updated:', value, 'Node exists:', !!this.selectedClip.gainNode);
+            
+            // テスト再生（スライダー操作中のみ）
+            this.testPlayAudio(this.selectedClip);
         }
         
         this.drawTimeline();
@@ -1776,9 +1791,11 @@ class StarlitTimelineApp {
         const existing = keyframes.find(kf => Math.abs(kf.time - localTime) < 0.05);
         if (existing) {
             existing.value = value;
+            console.log(`✏️ Updated keyframe: ${property} at ${localTime.toFixed(2)}s = ${value.toFixed(2)}`);
         } else {
             keyframes.push({ time: localTime, value: value });
             keyframes.sort((a, b) => a.time - b.time);
+            console.log(`➕ Added keyframe: ${property} at ${localTime.toFixed(2)}s = ${value.toFixed(2)}`);
         }
         
         // 音声パラメータ（pan）の場合、リアルタイムで適用
@@ -1811,9 +1828,40 @@ class StarlitTimelineApp {
         // 音声パラメータ（pan）の場合、リアルタイムで適用
         if (property === 'pan' && this.selectedClip.panNode) {
             this.selectedClip.panNode.pan.value = value;
+            console.log('🎚️ Pan updated (live):', value, 'Node exists:', !!this.selectedClip.panNode);
+            
+            // テスト再生（スライダー操作中のみ）
+            this.testPlayAudio(this.selectedClip);
         }
         
         this.updatePreview(); // プレビューのみ更新
+    }
+    
+    // 音声パラメータ調整時のテスト再生
+    testPlayAudio(clip) {
+        if (!clip.audioElement || !clip.audioElement.paused) return;
+        
+        const localTime = this.currentTime - clip.startTime;
+        const actualTime = localTime + (clip.trimStart || 0);
+        
+        // 範囲内かチェック
+        if (localTime < 0 || localTime >= clip.duration) return;
+        
+        // 短時間だけ再生
+        clip.audioElement.currentTime = actualTime;
+        clip.audioElement.play().catch(e => console.log('Test play error:', e));
+        
+        // 既存のタイマーをクリア
+        if (clip._testPlayTimeout) {
+            clearTimeout(clip._testPlayTimeout);
+        }
+        
+        // 200ms後に停止
+        clip._testPlayTimeout = setTimeout(() => {
+            if (!this.isPlaying && clip.audioElement && !clip.audioElement.paused) {
+                clip.audioElement.pause();
+            }
+        }, 200);
     }
     
     toggleKeyframe(property) {
@@ -2111,12 +2159,16 @@ class StarlitTimelineApp {
         const pan = this.getKeyframeValue(clip, 'pan', localTime);
         const volume = clip.volume || 1.0;
         
+        console.log('🎵 Playing audio - localTime:', localTime.toFixed(2), 'pan:', pan.toFixed(2), 'volume:', volume.toFixed(2));
+        
         // Web Audio APIノードに値を設定
         if (clip.gainNode) {
             clip.gainNode.gain.value = volume;
+            // console.log('🔊 Volume set:', volume);
         }
         if (clip.panNode) {
             clip.panNode.pan.value = pan;
+            // console.log('🎚️ Pan set:', pan);
         }
         
         if (this.isPlaying) {
@@ -3553,8 +3605,8 @@ class StarlitTimelineApp {
                 clip.keyframes.pan = [{time: 0, value: 0}];
             }
             
-            // 音声素材の場合、AudioElementを準備
-            if (asset.type === 'audio') {
+            // 音声素材または動画素材の場合、AudioElementを準備
+            if (asset.type === 'audio' || asset.type === 'video') {
                 this.prepareAudioClip(clip);
             }
             
