@@ -1270,6 +1270,11 @@ class StarlitTimelineApp {
         
         // エフェクト適用
         this.applyEffects();
+        
+        // バウンディングボックスを描画（選択クリップがある場合）
+        if (this.selectedClip && activeClips.includes(this.selectedClip)) {
+            this.drawBoundingBox(this.selectedClip);
+        }
     }
     
     async renderClip(clip) {
@@ -1690,6 +1695,148 @@ class StarlitTimelineApp {
         const g = parseInt(hex.slice(3, 5), 16);
         const b = parseInt(hex.slice(5, 7), 16);
         return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+    
+    // バウンディングボックスを描画
+    drawBoundingBox(clip) {
+        const ctx = this.previewCtx;
+        const localTime = this.currentTime - clip.startTime;
+        
+        // クリップの現在の変形値を取得
+        const x = this.getKeyframeValue(clip, 'x', localTime);
+        const y = this.getKeyframeValue(clip, 'y', localTime);
+        const rotation = this.getKeyframeValue(clip, 'rotation', localTime);
+        const scale = this.getKeyframeValue(clip, 'scale', localTime);
+        
+        // クリップのサイズを取得
+        let clipWidth = 800;
+        let clipHeight = 600;
+        
+        if (clip.asset.type === 'image' && clip.imageElement) {
+            if (clip.useOriginalSize && clip.originalWidth && clip.originalHeight) {
+                clipWidth = clip.originalWidth;
+                clipHeight = clip.originalHeight;
+            } else {
+                const aspectRatio = clip.imageElement.width / clip.imageElement.height;
+                clipWidth = 800;
+                clipHeight = 800 / aspectRatio;
+                if (clipHeight > 600) {
+                    clipHeight = 600;
+                    clipWidth = 600 * aspectRatio;
+                }
+            }
+        } else if (clip.asset.type === 'video' && clip.videoElement) {
+            if (clip.useOriginalSize && clip.originalWidth && clip.originalHeight) {
+                clipWidth = clip.originalWidth;
+                clipHeight = clip.originalHeight;
+            } else {
+                const aspectRatio = clip.videoElement.videoWidth / clip.videoElement.videoHeight;
+                clipWidth = 800;
+                clipHeight = 800 / aspectRatio;
+                if (clipHeight > 600) {
+                    clipHeight = 600;
+                    clipWidth = 600 * aspectRatio;
+                }
+            }
+        } else if (clip.asset.type === 'sequence' && clip.sequenceImages && clip.sequenceImages.length > 0) {
+            const img = clip.sequenceImages[0];
+            if (img && img.complete) {
+                if (clip.useOriginalSize && img.width && img.height) {
+                    clipWidth = img.width;
+                    clipHeight = img.height;
+                } else {
+                    const aspectRatio = img.width / img.height;
+                    clipWidth = 800;
+                    clipHeight = 800 / aspectRatio;
+                    if (clipHeight > 600) {
+                        clipHeight = 600;
+                        clipWidth = 600 * aspectRatio;
+                    }
+                }
+            }
+        }
+        
+        // スケール適用
+        const scaledWidth = clipWidth * scale;
+        const scaledHeight = clipHeight * scale;
+        
+        ctx.save();
+        
+        // キャンバス中心を基準に変形を適用
+        const centerX = this.previewCanvas.width / 2 + x;
+        const centerY = this.previewCanvas.height / 2 + y;
+        
+        ctx.translate(centerX, centerY);
+        ctx.rotate(rotation * Math.PI / 180);
+        
+        // バウンディングボックスを描画
+        ctx.strokeStyle = '#00D9FF'; // 明るい青色
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        ctx.strokeRect(-scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
+        ctx.setLineDash([]);
+        
+        // ハンドルを描画
+        const handleSize = 10;
+        const handles = [
+            { x: -scaledWidth / 2, y: -scaledHeight / 2, type: 'corner-tl' }, // 左上
+            { x: scaledWidth / 2, y: -scaledHeight / 2, type: 'corner-tr' },  // 右上
+            { x: scaledWidth / 2, y: scaledHeight / 2, type: 'corner-br' },   // 右下
+            { x: -scaledWidth / 2, y: scaledHeight / 2, type: 'corner-bl' },  // 左下
+            { x: 0, y: -scaledHeight / 2, type: 'edge-t' },                   // 上
+            { x: scaledWidth / 2, y: 0, type: 'edge-r' },                     // 右
+            { x: 0, y: scaledHeight / 2, type: 'edge-b' },                    // 下
+            { x: -scaledWidth / 2, y: 0, type: 'edge-l' }                     // 左
+        ];
+        
+        ctx.fillStyle = '#00D9FF';
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 1;
+        
+        handles.forEach(handle => {
+            ctx.fillRect(handle.x - handleSize / 2, handle.y - handleSize / 2, handleSize, handleSize);
+            ctx.strokeRect(handle.x - handleSize / 2, handle.y - handleSize / 2, handleSize, handleSize);
+        });
+        
+        // 回転ハンドル（上部中央から少し離れた位置）
+        const rotateHandleDistance = 30;
+        const rotateX = 0;
+        const rotateY = -scaledHeight / 2 - rotateHandleDistance;
+        
+        // 回転ハンドルへの線
+        ctx.strokeStyle = '#00D9FF';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, -scaledHeight / 2);
+        ctx.lineTo(rotateX, rotateY);
+        ctx.stroke();
+        
+        // 回転ハンドル（円形）
+        ctx.fillStyle = '#00D9FF';
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(rotateX, rotateY, handleSize / 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        
+        ctx.restore();
+        
+        // バウンディングボックス情報をキャッシュ（マウス操作で使用）
+        this.boundingBoxCache = {
+            centerX, centerY, rotation, scale,
+            scaledWidth, scaledHeight,
+            handles: handles.map(h => ({
+                ...h,
+                screenX: centerX + Math.cos(rotation * Math.PI / 180) * h.x - Math.sin(rotation * Math.PI / 180) * h.y,
+                screenY: centerY + Math.sin(rotation * Math.PI / 180) * h.x + Math.cos(rotation * Math.PI / 180) * h.y
+            })),
+            rotateHandle: {
+                type: 'rotate',
+                screenX: centerX + Math.cos(rotation * Math.PI / 180) * rotateX - Math.sin(rotation * Math.PI / 180) * rotateY,
+                screenY: centerY + Math.sin(rotation * Math.PI / 180) * rotateX + Math.cos(rotation * Math.PI / 180) * rotateY
+            }
+        };
     }
     
     // 再生コントロール
@@ -2526,88 +2673,152 @@ class StarlitTimelineApp {
     
     // プレビューキャンバスでのマウス操作
     handlePreviewMouseDown(e) {
-        if (!this.selectedClip) return;
+        if (!this.selectedClip || !this.boundingBoxCache) return;
         
         const rect = this.previewCanvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
         
-        this.isPreviewDragging = true;
-        this.previewDragStart = { x, y };
+        const handleSize = 10;
+        const handleHitArea = 15; // クリック判定を少し広げる
         
-        // Ctrl/Cmdキーの判定
-        const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-        const cmdKey = isMac ? e.metaKey : e.ctrlKey;
+        // 回転ハンドルの判定
+        const rotateHandle = this.boundingBoxCache.rotateHandle;
+        const distToRotate = Math.sqrt(
+            Math.pow(mouseX - rotateHandle.screenX, 2) + 
+            Math.pow(mouseY - rotateHandle.screenY, 2)
+        );
         
-        // モード判定を保留 - mousemoveで方向から判断
-        if (cmdKey) {
-            this.previewDragMode = 'waitingForDirection'; // 方向待ち
-        } else {
-            this.previewDragMode = 'position'; // 通常は位置移動
+        if (distToRotate < handleHitArea) {
+            this.isPreviewDragging = true;
+            this.previewDragStart = { x: mouseX, y: mouseY };
+            this.previewDragMode = 'rotate';
+            
+            const localTime = this.currentTime - this.selectedClip.startTime;
+            this.initialTransform = {
+                x: this.getKeyframeValue(this.selectedClip, 'x', localTime),
+                y: this.getKeyframeValue(this.selectedClip, 'y', localTime),
+                rotation: this.getKeyframeValue(this.selectedClip, 'rotation', localTime),
+                scale: this.getKeyframeValue(this.selectedClip, 'scale', localTime),
+                centerX: this.boundingBoxCache.centerX,
+                centerY: this.boundingBoxCache.centerY
+            };
+            e.preventDefault();
+            return;
         }
         
-        // 現在の値を保存
-        const localTime = this.currentTime - this.selectedClip.startTime;
-        this.initialTransform = {
-            x: this.getKeyframeValue(this.selectedClip, 'x', localTime),
-            y: this.getKeyframeValue(this.selectedClip, 'y', localTime),
-            rotation: this.getKeyframeValue(this.selectedClip, 'rotation', localTime),
-            scale: this.getKeyframeValue(this.selectedClip, 'scale', localTime)
-        };
+        // 各ハンドルの判定
+        for (let handle of this.boundingBoxCache.handles) {
+            const dist = Math.sqrt(
+                Math.pow(mouseX - handle.screenX, 2) + 
+                Math.pow(mouseY - handle.screenY, 2)
+            );
+            
+            if (dist < handleHitArea) {
+                this.isPreviewDragging = true;
+                this.previewDragStart = { x: mouseX, y: mouseY };
+                this.previewDragMode = handle.type;
+                this.activeHandle = handle;
+                
+                const localTime = this.currentTime - this.selectedClip.startTime;
+                this.initialTransform = {
+                    x: this.getKeyframeValue(this.selectedClip, 'x', localTime),
+                    y: this.getKeyframeValue(this.selectedClip, 'y', localTime),
+                    rotation: this.getKeyframeValue(this.selectedClip, 'rotation', localTime),
+                    scale: this.getKeyframeValue(this.selectedClip, 'scale', localTime),
+                    width: this.boundingBoxCache.scaledWidth,
+                    height: this.boundingBoxCache.scaledHeight
+                };
+                e.preventDefault();
+                return;
+            }
+        }
         
-        e.preventDefault();
+        // バウンディングボックス内のクリック判定（位置移動）
+        const bbox = this.boundingBoxCache;
+        const cos = Math.cos(-bbox.rotation * Math.PI / 180);
+        const sin = Math.sin(-bbox.rotation * Math.PI / 180);
+        
+        // マウス座標を回転を考慮してローカル座標に変換
+        const localX = cos * (mouseX - bbox.centerX) - sin * (mouseY - bbox.centerY);
+        const localY = sin * (mouseX - bbox.centerX) + cos * (mouseY - bbox.centerY);
+        
+        if (Math.abs(localX) < bbox.scaledWidth / 2 && Math.abs(localY) < bbox.scaledHeight / 2) {
+            this.isPreviewDragging = true;
+            this.previewDragStart = { x: mouseX, y: mouseY };
+            this.previewDragMode = 'move';
+            
+            const localTime = this.currentTime - this.selectedClip.startTime;
+            this.initialTransform = {
+                x: this.getKeyframeValue(this.selectedClip, 'x', localTime),
+                y: this.getKeyframeValue(this.selectedClip, 'y', localTime),
+                rotation: this.getKeyframeValue(this.selectedClip, 'rotation', localTime),
+                scale: this.getKeyframeValue(this.selectedClip, 'scale', localTime)
+            };
+            e.preventDefault();
+        }
     }
     
     handlePreviewMouseMove(e) {
         if (!this.isPreviewDragging || !this.selectedClip) return;
         
         const rect = this.previewCanvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
         
-        const dx = x - this.previewDragStart.x;
-        const dy = y - this.previewDragStart.y;
+        const dx = mouseX - this.previewDragStart.x;
+        const dy = mouseY - this.previewDragStart.y;
         
-        const localTime = this.currentTime - this.selectedClip.startTime;
-        
-        if (this.previewDragMode === 'position') {
-            // 通常ドラッグ: 位置移動
+        if (this.previewDragMode === 'move') {
+            // 位置移動
             const newX = this.initialTransform.x + dx;
             const newY = this.initialTransform.y + dy;
-            
             this.updateClipProperty('x', newX);
             this.updateClipProperty('y', newY);
             
-        } else if (this.previewDragMode === 'rotation') {
-            // Ctrl/Cmd + 左右ドラッグ: 回転
-            const rotationDelta = dx * 0.5; // 感度調整
-            const newRotation = this.initialTransform.rotation + rotationDelta;
+        } else if (this.previewDragMode === 'rotate') {
+            // 回転
+            const centerX = this.initialTransform.centerX;
+            const centerY = this.initialTransform.centerY;
+            
+            // 開始角度
+            const startAngle = Math.atan2(
+                this.previewDragStart.y - centerY,
+                this.previewDragStart.x - centerX
+            );
+            
+            // 現在の角度
+            const currentAngle = Math.atan2(
+                mouseY - centerY,
+                mouseX - centerX
+            );
+            
+            // 角度差（度）
+            const angleDelta = (currentAngle - startAngle) * 180 / Math.PI;
+            const newRotation = this.initialTransform.rotation + angleDelta;
+            
             this.updateClipProperty('rotation', newRotation);
             
-        } else if (this.previewDragMode === 'scale') {
-            // Ctrl/Cmd + 上下ドラッグ: スケール
-            const scaleDelta = -dy * 0.005; // 上にドラッグで拡大
+        } else if (this.previewDragMode.startsWith('corner-')) {
+            // コーナーハンドル: 均等スケール（アスペクト比維持）
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            const direction = this.previewDragMode.includes('br') || this.previewDragMode.includes('tr') ? 1 : -1;
+            
+            // スケール変化量を計算
+            const scaleDelta = (direction * distance) / 200; // 感度調整
             const newScale = Math.max(0.1, this.initialTransform.scale + scaleDelta);
+            
             this.updateClipProperty('scale', newScale);
             
-        } else if (this.previewDragMode === 'waitingForDirection') {
-            // 方向待ち中も移動量から即座に判定して処理
-            const threshold = 5; // ピクセル
-            if (Math.abs(dx) > threshold || Math.abs(dy) > threshold) {
-                if (Math.abs(dx) > Math.abs(dy)) {
-                    // 左右優位: 回転
-                    this.previewDragMode = 'rotation';
-                    const rotationDelta = dx * 0.5;
-                    const newRotation = this.initialTransform.rotation + rotationDelta;
-                    this.updateClipProperty('rotation', newRotation);
-                } else {
-                    // 上下優位: スケール
-                    this.previewDragMode = 'scale';
-                    const scaleDelta = -dy * 0.005;
-                    const newScale = Math.max(0.1, this.initialTransform.scale + scaleDelta);
-                    this.updateClipProperty('scale', newScale);
-                }
-            }
+        } else if (this.previewDragMode.startsWith('edge-')) {
+            // エッジハンドル: 非均等スケール（実装は複雑なため、とりあえず均等スケールとして扱う）
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            const direction = this.previewDragMode === 'edge-r' || this.previewDragMode === 'edge-b' ? 1 : -1;
+            
+            const scaleDelta = (direction * distance) / 200;
+            const newScale = Math.max(0.1, this.initialTransform.scale + scaleDelta);
+            
+            this.updateClipProperty('scale', newScale);
         }
         
         this.updatePreview();
@@ -2622,6 +2833,7 @@ class StarlitTimelineApp {
             this.previewDragStart = null;
             this.previewDragMode = null;
             this.initialTransform = null;
+            this.activeHandle = null;
             this.saveHistory();
         }
     }
