@@ -89,6 +89,12 @@ class StarlitTimelineApp {
         // プロジェクト読み込み時の一時保存
         this.pendingProject = null;
         
+        // プレビュードラッグ操作用
+        this.isPreviewDragging = false;
+        this.previewDragStart = null;
+        this.previewDragMode = null; // 'position', 'rotation', 'scale'
+        this.initialTransform = null;
+        
         this.init();
     }
     
@@ -127,6 +133,11 @@ class StarlitTimelineApp {
         
         // 定規のクリック/ドラッグイベント
         this.rulerCanvas.addEventListener('mousedown', (e) => this.handleRulerMouseDown(e));
+        
+        // プレビューキャンバスでの直感的操作
+        this.previewCanvas.addEventListener('mousedown', (e) => this.handlePreviewMouseDown(e));
+        document.addEventListener('mousemove', (e) => this.handlePreviewMouseMove(e));
+        document.addEventListener('mouseup', (e) => this.handlePreviewMouseUp(e));
         
         // タイムラインスクロールエリアのドラッグ&ドロップ（素材追加用）
         const timelineScroll = document.getElementById('timelineScroll');
@@ -1865,18 +1876,42 @@ class StarlitTimelineApp {
     
     // キーボードショートカット
     handleKeyDown(e) {
+        // Ctrl/Cmd判定（MacとWindowsの両対応）
+        const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+        const cmdKey = isMac ? e.metaKey : e.ctrlKey;
+        
         if (e.key === 'Delete' && this.selectedClip) {
             this.deleteSelected();
         }
         
-        if (e.ctrlKey && e.key === 'z') {
+        // Ctrl/Cmd + Z: 元に戻す
+        if (cmdKey && e.key === 'z') {
             e.preventDefault();
             this.undo();
         }
         
-        if (e.ctrlKey && e.key === 'y') {
+        // Ctrl/Cmd + Y: やり直し
+        if (cmdKey && e.key === 'y') {
             e.preventDefault();
             this.redo();
+        }
+        
+        // Ctrl/Cmd + S: プロジェクト保存
+        if (cmdKey && e.key === 's') {
+            e.preventDefault();
+            this.saveProject();
+        }
+        
+        // Ctrl/Cmd + O: プロジェクト読み込み
+        if (cmdKey && e.key === 'o') {
+            e.preventDefault();
+            this.openProject();
+        }
+        
+        // Ctrl/Cmd + E: 書き出しメニューを開く
+        if (cmdKey && e.key === 'e') {
+            e.preventDefault();
+            this.openExportMenu();
         }
         
         if (e.key === ' ') {
@@ -2471,6 +2506,102 @@ class StarlitTimelineApp {
             }
         } catch (error) {
             console.error('キャッシュ読込エラー:', error);
+        }
+    }
+    
+    // プレビューキャンバスでのマウス操作
+    handlePreviewMouseDown(e) {
+        if (!this.selectedClip) return;
+        
+        const rect = this.previewCanvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        this.isPreviewDragging = true;
+        this.previewDragStart = { x, y };
+        
+        // Ctrl/Cmdキーの判定
+        const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+        const cmdKey = isMac ? e.metaKey : e.ctrlKey;
+        
+        if (cmdKey) {
+            // Ctrl/Cmd押下時: 回転・スケールモード（後で判定）
+            this.previewDragMode = 'transform';
+        } else {
+            // 通常: 位置移動モード
+            this.previewDragMode = 'position';
+        }
+        
+        // 現在の値を保存
+        const localTime = this.currentTime - this.selectedClip.startTime;
+        this.initialTransform = {
+            x: this.getKeyframeValue(this.selectedClip, 'x', localTime),
+            y: this.getKeyframeValue(this.selectedClip, 'y', localTime),
+            rotation: this.getKeyframeValue(this.selectedClip, 'rotation', localTime),
+            scale: this.getKeyframeValue(this.selectedClip, 'scale', localTime)
+        };
+        
+        e.preventDefault();
+    }
+    
+    handlePreviewMouseMove(e) {
+        if (!this.isPreviewDragging || !this.selectedClip) return;
+        
+        const rect = this.previewCanvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        const dx = x - this.previewDragStart.x;
+        const dy = y - this.previewDragStart.y;
+        
+        const localTime = this.currentTime - this.selectedClip.startTime;
+        
+        if (this.previewDragMode === 'position') {
+            // 位置移動
+            const newX = this.initialTransform.x + dx;
+            const newY = this.initialTransform.y + dy;
+            
+            this.updateClipProperty('x', newX);
+            this.updateClipProperty('y', newY);
+            
+        } else if (this.previewDragMode === 'transform') {
+            // 左右ドラッグ: 回転
+            // 上下ドラッグ: スケール
+            
+            if (Math.abs(dx) > Math.abs(dy)) {
+                // 横方向優位: 回転
+                const rotationDelta = dx * 0.5; // 感度調整
+                const newRotation = this.initialTransform.rotation + rotationDelta;
+                this.updateClipProperty('rotation', newRotation);
+            } else {
+                // 縦方向優位: スケール
+                const scaleDelta = -dy * 0.005; // 上にドラッグで拡大
+                const newScale = Math.max(0.1, this.initialTransform.scale + scaleDelta);
+                this.updateClipProperty('scale', newScale);
+            }
+        }
+        
+        this.updatePreview();
+        this.updatePropertiesPanel();
+        
+        e.preventDefault();
+    }
+    
+    handlePreviewMouseUp(e) {
+        if (this.isPreviewDragging) {
+            this.isPreviewDragging = false;
+            this.previewDragStart = null;
+            this.previewDragMode = null;
+            this.initialTransform = null;
+            this.saveHistory();
+        }
+    }
+    
+    // 書き出しメニューを開く
+    openExportMenu() {
+        const menu = confirm('書き出しを開始しますか？\n\nOK: 連番PNG書き出し\nキャンセル: 閉じる');
+        if (menu) {
+            this.exportSequence();
         }
     }
     
