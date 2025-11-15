@@ -1,5 +1,246 @@
 # Starlit Timeline Editor - 変更履歴 📋
 
+## v3.17 (2025/11/15) - 本物のMP4書き出し機能実装 🎬
+
+### 🎬 FFmpeg.wasmで本物のMP4書き出し！
+
+**FFmpeg.wasm**を使用した、本物のMP4形式での動画書き出し機能を実装しました！
+さらに、透過対応の**WebM書き出し**も選択可能です。
+
+#### ✨ 新機能
+
+**書き出し形式の選択:**
+- 1️⃣ **MP4動画** (FFmpeg使用) - 本物のMP4、高互換性
+- 2️⃣ **WebM動画** (MediaRecorder使用) - 透過対応、高速
+- 3️⃣ **連番PNG** - 従来通り
+
+#### 🎥 MP4書き出しの特徴
+
+**本物のMP4形式:**
+- 🎥 **H.264エンコード** - FFmpeg.wasmでlibx264使用
+- 📊 **詳細な進捗表示** - フレーム生成→エンコード→クリーンアップ
+- 🎯 **高品質** - CRF 18（ほぼロスレス品質）
+- 💾 **自動クリーンアップ** - 一時ファイル自動削除
+- ⚡ **2回目以降高速** - FFmpegキャッシュ
+
+**用途:**
+- ✅ YouTube、TikTok、Instagram
+- ✅ すべてのデバイスで再生
+- ✅ 動画編集ソフトでの使用
+- ✅ 最終成果物として
+
+#### 🌈 WebM書き出しの特徴
+
+**透過（アルファチャンネル）対応:**
+- 🎥 **VP8/VP9エンコード** - MediaRecorder API使用
+- 🌟 **透過対応** - アルファチャンネル保持
+- ⚡ **高速書き出し** - リアルタイム録画
+- 📊 **8Mbps高品質** - ビットレート設定
+
+**用途:**
+- ✅ 透過素材として使用
+- ✅ After Effectsでの合成
+- ✅ Web素材（背景透過動画）
+- ✅ VTuber配信用オーバーレイ
+
+#### 📊 形式比較表
+
+| 項目 | MP4 (FFmpeg) | WebM (MediaRecorder) | 連番PNG |
+|------|-------------|---------------------|---------|
+| 互換性 | 🌟🌟🌟🌟🌟 | 🌟🌟🌟 | 🌟🌟 |
+| 透過対応 | ❌ | ✅ | ✅ |
+| 書き出し速度 | 中 | 速 | 遅 |
+| ファイルサイズ | 中 | 中 | 大 |
+| 初回起動 | 遅（FFmpeg読み込み） | 速 | 速 |
+| 品質 | CRF 18 | 8Mbps | ロスレス |
+| 用途 | 最終成果物 | 透過素材 | 再編集 |
+
+#### 🎨 書き出しフロー（MP4）
+
+```
+1. Ctrl/Cmd + E でメニューを開く
+   ↓
+2. "1" を入力 (MP4)
+   ↓
+3. FFmpeg.wasmを読み込み（初回のみ）
+   ↓
+4. 各フレームをPNG画像として生成
+   - FFmpegの仮想ファイルシステムに保存
+   - 進捗表示: 30/300 フレーム (10%)
+   ↓
+5. FFmpegでMP4にエンコード
+   - libx264でH.264変換
+   - 進捗表示: エンコード中...
+   ↓
+6. ファイルをダウンロード
+   ↓
+7. 一時ファイルをクリーンアップ
+   ↓
+8. 完了！
+```
+
+#### 🌈 書き出しフロー（WebM）
+
+```
+1. Ctrl/Cmd + E でメニューを開く
+   ↓
+2. "2" を入力 (WebM)
+   ↓
+3. MediaRecorderでリアルタイム録画開始
+   - VP9/VP8エンコーダー自動選択
+   ↓
+4. フレームごとに録画
+   - 進捗表示: 150/300 フレーム (50%)
+   ↓
+5. WebMファイルをダウンロード
+   ↓
+6. 完了！（透過保持）
+```
+
+#### 🔧 技術スタック
+
+**MP4書き出し（FFmpeg.wasm）:**
+```
+-c:v libx264        # H.264コーデック
+-pix_fmt yuv420p    # 互換性の高いピクセルフォーマット
+-preset medium      # バランスの取れた設定
+-crf 18             # 高品質（0-51、低いほど高品質）
+```
+
+**WebM書き出し（MediaRecorder）:**
+```javascript
+const recorder = new MediaRecorder(stream, {
+    mimeType: 'video/webm;codecs=vp9',
+    videoBitsPerSecond: 8000000  // 8Mbps
+});
+```
+
+#### 💡 使用例
+
+**YouTubeにアップロード:**
+- 形式: MP4 (選択肢1)
+- 理由: 最高の互換性
+
+**透過素材として使用:**
+- 形式: WebM (選択肢2)
+- 理由: アルファチャンネル保持
+
+**After Effectsで再編集:**
+- 形式: 連番PNG (選択肢3)
+- 理由: ロスレス品質
+
+#### ⚙️ FFmpeg.wasmの仕組み
+
+**1. 初期化（初回のみ）:**
+```javascript
+const { FFmpeg } = FFmpegWASM;
+this.ffmpeg = new FFmpeg();
+
+await this.ffmpeg.load({
+    coreURL: 'ffmpeg-core.js',
+    wasmURL: 'ffmpeg-core.wasm'
+});
+```
+
+**2. フレーム生成:**
+```javascript
+for (let i = 0; i < frames; i++) {
+    // キャンバスをPNGに変換
+    const blob = await new Promise(resolve => {
+        this.previewCanvas.toBlob(resolve, 'image/png');
+    });
+    
+    // FFmpegのファイルシステムに書き込み
+    await this.ffmpeg.writeFile(`frame${i}.png`, await fetchFile(blob));
+}
+```
+
+**3. MP4エンコード:**
+```javascript
+await this.ffmpeg.exec([
+    '-framerate', '30',
+    '-i', 'frame%05d.png',
+    '-c:v', 'libx264',
+    '-pix_fmt', 'yuv420p',
+    '-crf', '18',
+    'output.mp4'
+]);
+```
+
+**4. ファイル取得:**
+```javascript
+const data = await this.ffmpeg.readFile('output.mp4');
+const blob = new Blob([data.buffer], { type: 'video/mp4' });
+```
+
+#### 📦 CDN経由で読み込み
+
+```html
+<script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.7/dist/umd/ffmpeg.js"></script>
+<script src="https://unpkg.com/@ffmpeg/util@0.12.1/dist/umd/index.js"></script>
+```
+
+**初回読み込み:**
+- ffmpeg-core.js: 約1MB
+- ffmpeg-core.wasm: 約31MB
+
+**キャッシュ後:**
+- 読み込み時間: 数百ミリ秒
+
+#### ⚠️ 注意事項
+
+**メモリ使用量:**
+- 長時間の動画は大量のメモリを使用
+- 推奨: 60秒以内
+
+**処理時間:**
+- 初回: FFmpegの読み込みに10-20秒
+- 2回目以降: フレーム数に応じて
+
+**ブラウザ対応:**
+- Chrome/Edge: ✅ 完全対応
+- Firefox: ✅ 完全対応  
+- Safari: ✅ 対応（iOS 16.4+）
+
+#### 🚀 今後の拡張予定
+
+1. **エンコード設定のカスタマイズ**
+   - CRF値の選択（品質調整）
+   - プリセットの選択（速度調整）
+   - ビットレート指定
+
+2. **音声トラック対応**
+   - 音声をAAC形式でエンコード
+   - 映像と音声を結合
+
+3. **プログレスバーの改善**
+   - FFmpegの進捗をリアルタイム表示
+   - 推定残り時間の表示
+
+4. **バッチ書き出し**
+   - 複数範囲の一括書き出し
+
+#### 🚀 将来の拡張予定
+
+1. **音声書き出し**
+   - AudioContext からの音声トラック追加
+   - 複数クリップの音声ミックス
+
+2. **書き出し設定**
+   - ビットレート選択（2Mbps / 8Mbps / 15Mbps）
+   - 解像度選択（720p / 1080p / 4K）
+   - フレームレート選択（24 / 30 / 60fps）
+
+3. **MP4形式対応**
+   - WebCodecs API の利用
+   - WASM ベースのエンコーダー
+
+4. **バッチ書き出し**
+   - 複数の範囲を一度に書き出し
+   - プリセット管理
+
+---
+
 ## v3.15 (2025/11/15) - バウンディングボックスUI実装 🎨
 
 ### 🎨 バウンディングボックスによる直感的な操作

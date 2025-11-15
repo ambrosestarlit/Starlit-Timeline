@@ -95,6 +95,10 @@ class StarlitTimelineApp {
         this.previewDragMode = null; // 'position', 'rotation', 'scale'
         this.initialTransform = null;
         
+        // FFmpeg.wasm for MP4 export
+        this.ffmpeg = null;
+        this.ffmpegLoaded = false;
+        
         this.init();
     }
     
@@ -1697,6 +1701,35 @@ class StarlitTimelineApp {
         return `rgba(${r}, ${g}, ${b}, ${alpha})`;
     }
     
+    // FFmpeg.wasmの初期化
+    async loadFFmpeg() {
+        if (this.ffmpegLoaded) return;
+        
+        try {
+            const { FFmpeg } = FFmpegWASM;
+            const { fetchFile, toBlobURL } = FFmpegUtil;
+            
+            this.ffmpeg = new FFmpeg();
+            
+            const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+            
+            this.ffmpeg.on('log', ({ message }) => {
+                console.log('[FFmpeg]', message);
+            });
+            
+            await this.ffmpeg.load({
+                coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+                wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+            });
+            
+            this.ffmpegLoaded = true;
+            console.log('✅ FFmpeg loaded successfully');
+        } catch (error) {
+            console.error('❌ Failed to load FFmpeg:', error);
+            throw error;
+        }
+    }
+    
     // バウンディングボックスを描画
     drawBoundingBox(clip) {
         const ctx = this.previewCtx;
@@ -2840,15 +2873,308 @@ class StarlitTimelineApp {
     
     // 書き出しメニューを開く
     openExportMenu() {
-        const menu = confirm('書き出しを開始しますか？\n\nOK: 連番PNG書き出し\nキャンセル: 閉じる');
-        if (menu) {
+        // 書き出しダイアログを表示
+        const choice = prompt(
+            '書き出し形式を選択してください:\n\n' +
+            '1: MP4動画 (FFmpeg使用・高互換性)\n' +
+            '2: WebM動画 (透過対応・高速)\n' +
+            '3: 連番PNG\n' +
+            '4: キャンセル',
+            '1'
+        );
+        
+        if (choice === '1') {
+            this.exportVideo();
+        } else if (choice === '2') {
+            this.exportWebM();
+        } else if (choice === '3') {
             this.exportSequence();
         }
     }
     
     // 書き出し機能
     async exportVideo() {
-        alert('MP4書き出し機能は開発中です。現在はブラウザの制限により、連番PNG書き出しをご利用ください。');
+        const startTime = parseFloat(document.getElementById('exportStart').value);
+        const endTime = parseFloat(document.getElementById('exportEnd').value);
+        
+        if (startTime >= endTime) {
+            alert('書き出し範囲が不正です');
+            return;
+        }
+        
+        const duration = endTime - startTime;
+        const frames = Math.ceil(duration * this.fps);
+        
+        if (!confirm(`MP4動画を書き出しますか?\n\n長さ: ${duration.toFixed(2)}秒\nフレーム数: ${frames}\nFPS: ${this.fps}`)) {
+            return;
+        }
+        
+        // 進捗表示用の要素を作成
+        const progressDiv = document.createElement('div');
+        progressDiv.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            z-index: 10000;
+            font-family: 'JK Maru Gothic M', sans-serif;
+            text-align: center;
+            min-width: 400px;
+        `;
+        progressDiv.innerHTML = `
+            <h3 style="margin: 0 0 15px 0;">MP4書き出し中...</h3>
+            <div id="exportProgress" style="margin: 10px 0;">FFmpegを読み込み中...</div>
+            <div id="exportDetail" style="font-size: 12px; color: #999; margin-top: 10px;">準備中...</div>
+        `;
+        document.body.appendChild(progressDiv);
+        
+        const updateProgress = (message, detail = '') => {
+            const progressEl = document.getElementById('exportProgress');
+            const detailEl = document.getElementById('exportDetail');
+            if (progressEl) progressEl.textContent = message;
+            if (detailEl) detailEl.textContent = detail;
+        };
+        
+        const originalTime = this.currentTime;
+        
+        try {
+            // FFmpegを初期化
+            updateProgress('FFmpegを読み込み中...', '初回のみ時間がかかります');
+            await this.loadFFmpeg();
+            
+            updateProgress('フレームを生成中...', `0/${frames} フレーム`);
+            
+            const { fetchFile } = FFmpegUtil;
+            
+            // 各フレームをPNG画像として生成
+            for (let i = 0; i < frames; i++) {
+                this.currentTime = startTime + (i / this.fps);
+                this.updatePreview();
+                
+                // キャンバスをBlobに変換
+                const blob = await new Promise(resolve => {
+                    this.previewCanvas.toBlob(resolve, 'image/png');
+                });
+                
+                // FFmpegのファイルシステムに書き込み
+                const fileName = `frame${i.toString().padStart(5, '0')}.png`;
+                await this.ffmpeg.writeFile(fileName, await fetchFile(blob));
+                
+                updateProgress(
+                    `フレームを生成中...`,
+                    `${i + 1}/${frames} フレーム (${Math.floor((i + 1) / frames * 100)}%)`
+                );
+            }
+            
+            updateProgress('MP4にエンコード中...', 'FFmpegで変換しています');
+            
+            // FFmpegでMP4に変換
+            await this.ffmpeg.exec([
+                '-framerate', this.fps.toString(),
+                '-i', 'frame%05d.png',
+                '-c:v', 'libx264',
+                '-pix_fmt', 'yuv420p',
+                '-preset', 'medium',
+                '-crf', '18',
+                'output.mp4'
+            ]);
+            
+            updateProgress('ファイルを生成中...', 'ダウンロード準備中');
+            
+            // 生成されたMP4を読み込み
+            const data = await this.ffmpeg.readFile('output.mp4');
+            
+            // Blobを作成してダウンロード
+            const blob = new Blob([data.buffer], { type: 'video/mp4' });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `starlit_timeline_export_${Date.now()}.mp4`;
+            a.click();
+            
+            URL.revokeObjectURL(url);
+            
+            // 一時ファイルをクリーンアップ
+            updateProgress('クリーンアップ中...', 'ファイルを削除しています');
+            for (let i = 0; i < frames; i++) {
+                const fileName = `frame${i.toString().padStart(5, '0')}.png`;
+                try {
+                    await this.ffmpeg.deleteFile(fileName);
+                } catch (e) {
+                    // ファイルが存在しない場合は無視
+                }
+            }
+            await this.ffmpeg.deleteFile('output.mp4');
+            
+            // 進捗表示を削除
+            document.body.removeChild(progressDiv);
+            
+            // 元の時間に戻す
+            this.currentTime = originalTime;
+            this.updatePreview();
+            this.drawTimeline();
+            
+            alert('✅ MP4書き出しが完了しました!');
+            
+        } catch (error) {
+            console.error('Export error:', error);
+            if (progressDiv.parentNode) {
+                document.body.removeChild(progressDiv);
+            }
+            
+            this.currentTime = originalTime;
+            this.updatePreview();
+            this.drawTimeline();
+            
+            alert('❌ 書き出しに失敗しました:\n' + error.message);
+        }
+    }
+    
+    async exportWebM() {
+        const startTime = parseFloat(document.getElementById('exportStart').value);
+        const endTime = parseFloat(document.getElementById('exportEnd').value);
+        
+        if (startTime >= endTime) {
+            alert('書き出し範囲が不正です');
+            return;
+        }
+        
+        const duration = endTime - startTime;
+        const frames = Math.ceil(duration * this.fps);
+        
+        if (!confirm(`WebM動画を書き出しますか?\n\n長さ: ${duration.toFixed(2)}秒\nフレーム数: ${frames}\nFPS: ${this.fps}\n\n※WebMは透過（アルファチャンネル）に対応しています`)) {
+            return;
+        }
+        
+        // 進捗表示用の要素を作成
+        const progressDiv = document.createElement('div');
+        progressDiv.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            z-index: 10000;
+            font-family: 'JK Maru Gothic M', sans-serif;
+            text-align: center;
+            min-width: 300px;
+        `;
+        progressDiv.innerHTML = `
+            <h3 style="margin: 0 0 15px 0;">WebM書き出し中...</h3>
+            <div id="exportProgress" style="margin: 10px 0;">準備中...</div>
+            <div style="font-size: 12px; color: #999; margin-top: 10px;">しばらくお待ちください</div>
+        `;
+        document.body.appendChild(progressDiv);
+        
+        const updateProgress = (message) => {
+            const progressEl = document.getElementById('exportProgress');
+            if (progressEl) progressEl.textContent = message;
+        };
+        
+        try {
+            // MediaRecorderのセットアップ
+            const stream = this.previewCanvas.captureStream(this.fps);
+            
+            const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+                ? 'video/webm;codecs=vp9'
+                : MediaRecorder.isTypeSupported('video/webm;codecs=vp8')
+                ? 'video/webm;codecs=vp8'
+                : 'video/webm';
+            
+            updateProgress(`エンコーダー: ${mimeType}`);
+            
+            const recorder = new MediaRecorder(stream, {
+                mimeType: mimeType,
+                videoBitsPerSecond: 8000000 // 8Mbps
+            });
+            
+            const chunks = [];
+            
+            recorder.ondataavailable = (e) => {
+                if (e.data.size > 0) {
+                    chunks.push(e.data);
+                }
+            };
+            
+            recorder.onstop = async () => {
+                updateProgress('ファイルを生成中...');
+                
+                const blob = new Blob(chunks, { type: mimeType });
+                const url = URL.createObjectURL(blob);
+                
+                // ダウンロード
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `starlit_timeline_export_${Date.now()}.webm`;
+                a.click();
+                
+                URL.revokeObjectURL(url);
+                
+                // 進捗表示を削除
+                document.body.removeChild(progressDiv);
+                
+                // 元の時間に戻す
+                this.currentTime = originalTime;
+                this.updatePreview();
+                this.drawTimeline();
+                
+                alert('✅ WebM書き出しが完了しました!\n\nWebM形式で保存されています。\n透過（アルファチャンネル）に対応しています。');
+            };
+            
+            recorder.onerror = (e) => {
+                console.error('Recording error:', e);
+                document.body.removeChild(progressDiv);
+                alert('❌ 書き出し中にエラーが発生しました');
+            };
+            
+            // 録画開始
+            recorder.start();
+            updateProgress('録画開始...');
+            
+            const originalTime = this.currentTime;
+            const frameInterval = 1000 / this.fps; // ミリ秒
+            let currentFrame = 0;
+            
+            // フレームごとにプレビューを更新
+            const renderFrame = () => {
+                if (currentFrame >= frames) {
+                    // 録画停止
+                    updateProgress('エンコード中...');
+                    setTimeout(() => {
+                        recorder.stop();
+                    }, 500); // 最後のフレームを確実にキャプチャ
+                    return;
+                }
+                
+                this.currentTime = startTime + (currentFrame / this.fps);
+                this.updatePreview();
+                this.drawTimeline();
+                
+                currentFrame++;
+                updateProgress(`録画中: ${currentFrame}/${frames} フレーム (${Math.floor(currentFrame / frames * 100)}%)`);
+                
+                // 次のフレームをスケジュール
+                setTimeout(renderFrame, frameInterval);
+            };
+            
+            // レンダリング開始
+            renderFrame();
+            
+        } catch (error) {
+            console.error('Export error:', error);
+            if (progressDiv.parentNode) {
+                document.body.removeChild(progressDiv);
+            }
+            alert('❌ 書き出しに失敗しました: ' + error.message);
+        }
     }
     
     async exportSequence() {
