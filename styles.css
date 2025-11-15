@@ -1021,3 +1021,78 @@ input[type="checkbox"] {
     border-radius: 10px;
     pointer-events: none;
 }
+
+/* ========================================
+   キーフレームリストスタイル
+   ======================================== */
+.keyframe-controls {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+}
+
+.keyframe-controls .small-button {
+    padding: 6px 12px;
+    background: var(--chocolate-dark);
+    color: var(--biscuit-light);
+    border: 1px solid var(--cocoa-color);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+}
+
+.keyframe-controls .small-button:hover {
+    background: var(--cocoa-color);
+    border-color: var(--accent-orange);
+}
+
+.keyframe-list {
+    max-height: 200px;
+    overflow-y: auto;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+    padding: 5px;
+}
+
+.keyframe-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px;
+    margin-bottom: 4px;
+    background: var(--chocolate-dark);
+    border-left: 3px solid var(--cocoa-color);
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.keyframe-item:hover {
+    background: var(--cocoa-color);
+    border-left-color: var(--accent-orange);
+}
+
+.keyframe-item.current {
+    background: var(--accent-orange);
+    border-left-color: #FFD700;
+}
+
+.keyframe-time {
+    font-weight: bold;
+    color: var(--biscuit-light);
+    min-width: 80px;
+}
+
+.keyframe-values {
+    font-size: 11px;
+    color: var(--biscuit-main);
+}
+
+.keyframe-list .empty-message {
+    text-align: center;
+    padding: 15px;
+    color: var(--biscuit-main);
+    font-style: italic;
+}

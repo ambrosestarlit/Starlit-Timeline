@@ -263,6 +263,45 @@
                                 </div>
                             </div>
                         </div>
+
+                        <div class="effect-item">
+                            <div class="effect-header" onclick="app.toggleEffect('diffusion')">
+                                <span>✨ ディフュージョン撮影</span>
+                                <input type="checkbox" id="diffusionEnable" onchange="app.updatePreview()">
+                            </div>
+                            <div class="effect-controls" id="diffusionControls">
+                                <div class="effect-section">
+                                    <div class="effect-section-title">📷 ディフュージョンパラメータ</div>
+                                    
+                                    <label>ぼかし: <span id="diffusionBlurValue">0</span></label>
+                                    <input type="range" min="0" max="300" value="0" class="effect-slider" id="diffusionBlur" oninput="app.updateDiffusionEffect()">
+                                    
+                                    <label>コントラスト: <span id="diffusionContrastValue">0</span></label>
+                                    <input type="range" min="-100" max="100" value="0" class="effect-slider" id="diffusionContrast" oninput="app.updateDiffusionEffect()">
+                                    
+                                    <label>明るさ: <span id="diffusionBrightnessValue">0</span></label>
+                                    <input type="range" min="-100" max="100" value="0" class="effect-slider" id="diffusionBrightness" oninput="app.updateDiffusionEffect()">
+                                    
+                                    <label>彩度: <span id="diffusionSaturationValue">0</span></label>
+                                    <input type="range" min="-100" max="100" value="0" class="effect-slider" id="diffusionSaturation" oninput="app.updateDiffusionEffect()">
+                                    
+                                    <label>不透明度: <span id="diffusionOpacityValue">100%</span></label>
+                                    <input type="range" min="0" max="100" value="100" class="effect-slider" id="diffusionOpacity" oninput="app.updateDiffusionEffect()">
+                                </div>
+                                
+                                <div class="effect-section">
+                                    <div class="effect-section-title">🎬 キーフレーム</div>
+                                    <div class="keyframe-controls">
+                                        <button class="small-button" onclick="app.addDiffusionKeyframe()">⏺ キーフレーム追加</button>
+                                        <button class="small-button" onclick="app.removeDiffusionKeyframe()">❌ 削除</button>
+                                        <button class="small-button" onclick="app.clearDiffusionKeyframes()">🗑️ 全削除</button>
+                                    </div>
+                                    <div class="keyframe-list" id="diffusionKeyframeList">
+                                        <div class="empty-message">キーフレームなし</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

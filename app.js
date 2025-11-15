@@ -42,6 +42,16 @@ class StarlitTimelineApp {
                     opacity: 50,           // localStorage に保存
                     blendMode: 'normal'    // localStorage に保存
                 }
+            },
+            diffusion: {
+                enabled: false, // プロジェクトファイルに保存
+                blur: 0,        // 0-300, localStorage に保存
+                contrast: 0,    // -100 to 100, localStorage に保存
+                brightness: 0,  // -100 to 100, localStorage に保存
+                saturation: 0,  // -100 to 100, localStorage に保存
+                opacity: 100,   // 0-100%, localStorage に保存
+                // キーフレーム対応
+                keyframes: []   // { time: number, blur, contrast, brightness, saturation, opacity }
             }
         };
         
@@ -182,6 +192,12 @@ class StarlitTimelineApp {
             this.effects.gradient.enabled = e.target.checked;
             this.updatePreview();
         });
+        
+        // ディフュージョン有効/無効 - プロジェクト依存なのでキャッシュ保存しない
+        document.getElementById('diffusionEnable').addEventListener('change', (e) => {
+            this.effects.diffusion.enabled = e.target.checked;
+            this.updatePreview();
+        });
     }
     
     // グラデーションエフェクト更新（新規メソッド）
@@ -206,6 +222,113 @@ class StarlitTimelineApp {
         this.saveSettingsToCache();
         
         this.updatePreview();
+    }
+    
+    updateDiffusionEffect() {
+        // パラメータ取得
+        this.effects.diffusion.blur = parseFloat(document.getElementById('diffusionBlur').value);
+        this.effects.diffusion.contrast = parseFloat(document.getElementById('diffusionContrast').value);
+        this.effects.diffusion.brightness = parseFloat(document.getElementById('diffusionBrightness').value);
+        this.effects.diffusion.saturation = parseFloat(document.getElementById('diffusionSaturation').value);
+        this.effects.diffusion.opacity = parseFloat(document.getElementById('diffusionOpacity').value);
+        
+        // 表示値更新
+        document.getElementById('diffusionBlurValue').textContent = `${this.effects.diffusion.blur}`;
+        document.getElementById('diffusionContrastValue').textContent = `${this.effects.diffusion.contrast}`;
+        document.getElementById('diffusionBrightnessValue').textContent = `${this.effects.diffusion.brightness}`;
+        document.getElementById('diffusionSaturationValue').textContent = `${this.effects.diffusion.saturation}`;
+        document.getElementById('diffusionOpacityValue').textContent = `${this.effects.diffusion.opacity}%`;
+        
+        // キャッシュに自動保存
+        this.saveSettingsToCache();
+        
+        this.updatePreview();
+    }
+    
+    // ディフュージョンキーフレーム追加
+    addDiffusionKeyframe() {
+        const keyframe = {
+            time: this.currentTime,
+            blur: this.effects.diffusion.blur,
+            contrast: this.effects.diffusion.contrast,
+            brightness: this.effects.diffusion.brightness,
+            saturation: this.effects.diffusion.saturation,
+            opacity: this.effects.diffusion.opacity
+        };
+        
+        // 既存のキーフレームを更新または追加
+        const existingIndex = this.effects.diffusion.keyframes.findIndex(kf => Math.abs(kf.time - this.currentTime) < 0.01);
+        if (existingIndex >= 0) {
+            this.effects.diffusion.keyframes[existingIndex] = keyframe;
+        } else {
+            this.effects.diffusion.keyframes.push(keyframe);
+        }
+        
+        this.updateDiffusionKeyframeList();
+        this.saveHistory();
+    }
+    
+    // ディフュージョンキーフレーム削除
+    removeDiffusionKeyframe() {
+        const keyframeIndex = this.effects.diffusion.keyframes.findIndex(kf => Math.abs(kf.time - this.currentTime) < 0.01);
+        if (keyframeIndex >= 0) {
+            this.effects.diffusion.keyframes.splice(keyframeIndex, 1);
+            this.updateDiffusionKeyframeList();
+            this.saveHistory();
+        }
+    }
+    
+    // ディフュージョンキーフレーム全削除
+    clearDiffusionKeyframes() {
+        if (confirm('すべてのディフュージョンキーフレームを削除しますか?')) {
+            this.effects.diffusion.keyframes = [];
+            this.updateDiffusionKeyframeList();
+            this.saveHistory();
+        }
+    }
+    
+    // ディフュージョンキーフレームリスト更新
+    updateDiffusionKeyframeList() {
+        const list = document.getElementById('diffusionKeyframeList');
+        if (!list) return;
+        
+        const keyframes = this.effects.diffusion.keyframes;
+        
+        if (keyframes.length === 0) {
+            list.innerHTML = '<div class="empty-message">キーフレームなし</div>';
+            return;
+        }
+        
+        // 時刻順にソート
+        keyframes.sort((a, b) => a.time - b.time);
+        
+        list.innerHTML = keyframes.map((kf, i) => {
+            const timeStr = this.formatTime(kf.time);
+            const isCurrent = Math.abs(kf.time - this.currentTime) < 0.01;
+            return `
+                <div class="keyframe-item ${isCurrent ? 'current' : ''}" onclick="app.seekToTime(${kf.time})">
+                    <span class="keyframe-time">${timeStr}</span>
+                    <span class="keyframe-values">B:${kf.blur.toFixed(0)} C:${kf.contrast.toFixed(0)} Br:${kf.brightness.toFixed(0)}</span>
+                </div>
+            `;
+        }).join('');
+    }
+    
+    // 時刻フォーマット関数
+    formatTime(seconds) {
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = Math.floor(seconds % 60);
+        const ms = Math.floor((seconds % 1) * 1000);
+        return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
+    }
+    
+    // 指定時刻にシーク
+    seekToTime(time) {
+        this.currentTime = Math.max(0, Math.min(time, this.duration));
+        this.updatePreview();
+        this.drawTimeline();
+        this.drawRuler();
     }
     
     // ファイル管理
@@ -1687,6 +1810,11 @@ class StarlitTimelineApp {
                 clip.videoElement.src = clip.asset.url;
                 clip.videoElement.muted = true;
                 clip.videoElement.preload = 'auto';
+                clip.videoElement.crossOrigin = 'anonymous'; // CORS対応
+                
+                // MOVファイルなど、ブラウザがネイティブサポートしていないコーデックのための追加設定
+                // ※ブラウザによっては H.264/AAC の MOV をサポート
+                clip.videoElement.setAttribute('playsinline', 'true');
                 
                 clip.videoElement.onloadeddata = () => {
                     clip.videoElement.currentTime = actualTime;
@@ -1694,6 +1822,13 @@ class StarlitTimelineApp {
                     if (clip.videoElement.readyState >= 2) {
                         this.drawVideoOnCanvas(clip);
                     }
+                    resolve();
+                };
+                
+                // エラーハンドリング追加（MOVが読み込めない場合のログ）
+                clip.videoElement.onerror = (e) => {
+                    console.error('動画読み込みエラー:', clip.asset.name, e);
+                    console.warn('MOVファイルはブラウザのコーデックサポートに依存します。H.264/AAC形式のMOVを推奨します。');
                     resolve();
                 };
                 
@@ -1819,6 +1954,210 @@ class StarlitTimelineApp {
             // 下部のレターボックス
             ctx.fillRect(0, height - this.effects.letterbox.height, width, this.effects.letterbox.height);
         }
+        
+        // ディフュージョン撮影エフェクト（最後に適用）
+        if (this.effects.diffusion.enabled) {
+            this.applyDiffusionEffect(ctx, width, height);
+        }
+    }
+    
+    // ディフュージョン撮影エフェクトの適用
+    applyDiffusionEffect(ctx, width, height) {
+        // 現在時刻のパラメータを取得（キーフレーム補間）
+        const params = this.getDiffusionParamsAtTime(this.currentTime);
+        
+        // 元の画像データを取得
+        const imageData = ctx.getImageData(0, 0, width, height);
+        const data = imageData.data;
+        
+        // パラメータを適用
+        // 1. ブラー効果（簡易実装: ぼかし半径に応じてピクセルを平均化）
+        if (params.blur > 0) {
+            this.applySimpleBlur(imageData, width, height, params.blur);
+        }
+        
+        // 2. 明るさ、コントラスト、彩度調整
+        for (let i = 0; i < data.length; i += 4) {
+            let r = data[i];
+            let g = data[i + 1];
+            let b = data[i + 2];
+            
+            // 明るさ調整 (-100 to 100)
+            if (params.brightness !== 0) {
+                const brightnessFactor = params.brightness * 2.55; // -255 to 255
+                r = Math.max(0, Math.min(255, r + brightnessFactor));
+                g = Math.max(0, Math.min(255, g + brightnessFactor));
+                b = Math.max(0, Math.min(255, b + brightnessFactor));
+            }
+            
+            // コントラスト調整 (-100 to 100)
+            if (params.contrast !== 0) {
+                const contrastFactor = (100 + params.contrast) / 100;
+                r = Math.max(0, Math.min(255, ((r - 128) * contrastFactor) + 128));
+                g = Math.max(0, Math.min(255, ((g - 128) * contrastFactor) + 128));
+                b = Math.max(0, Math.min(255, ((b - 128) * contrastFactor) + 128));
+            }
+            
+            // 彩度調整 (-100 to 100)
+            if (params.saturation !== 0) {
+                const gray = 0.2989 * r + 0.5870 * g + 0.1140 * b;
+                const saturationFactor = (100 + params.saturation) / 100;
+                r = Math.max(0, Math.min(255, gray + (r - gray) * saturationFactor));
+                g = Math.max(0, Math.min(255, gray + (g - gray) * saturationFactor));
+                b = Math.max(0, Math.min(255, gray + (b - gray) * saturationFactor));
+            }
+            
+            data[i] = r;
+            data[i + 1] = g;
+            data[i + 2] = b;
+        }
+        
+        // 画像データを戻す
+        ctx.putImageData(imageData, 0, 0);
+        
+        // 3. 不透明度調整（オーバーレイとして）
+        if (params.opacity < 100) {
+            ctx.globalAlpha = params.opacity / 100;
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.globalAlpha = 1.0;
+        }
+    }
+    
+    // 簡易ブラー実装（ボックスブラー）
+    applySimpleBlur(imageData, width, height, blurRadius) {
+        const data = imageData.data;
+        const tempData = new Uint8ClampedArray(data);
+        
+        // ブラー半径を0-300から0-20ピクセル程度に変換
+        const radius = Math.floor(blurRadius / 15);
+        if (radius < 1) return;
+        
+        // 水平方向のブラー
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                let r = 0, g = 0, b = 0, a = 0, count = 0;
+                
+                for (let dx = -radius; dx <= radius; dx++) {
+                    const px = x + dx;
+                    if (px >= 0 && px < width) {
+                        const idx = (y * width + px) * 4;
+                        r += tempData[idx];
+                        g += tempData[idx + 1];
+                        b += tempData[idx + 2];
+                        a += tempData[idx + 3];
+                        count++;
+                    }
+                }
+                
+                const idx = (y * width + x) * 4;
+                data[idx] = r / count;
+                data[idx + 1] = g / count;
+                data[idx + 2] = b / count;
+                data[idx + 3] = a / count;
+            }
+        }
+        
+        // 垂直方向のブラー
+        tempData.set(data);
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                let r = 0, g = 0, b = 0, a = 0, count = 0;
+                
+                for (let dy = -radius; dy <= radius; dy++) {
+                    const py = y + dy;
+                    if (py >= 0 && py < height) {
+                        const idx = (py * width + x) * 4;
+                        r += tempData[idx];
+                        g += tempData[idx + 1];
+                        b += tempData[idx + 2];
+                        a += tempData[idx + 3];
+                        count++;
+                    }
+                }
+                
+                const idx = (y * width + x) * 4;
+                data[idx] = r / count;
+                data[idx + 1] = g / count;
+                data[idx + 2] = b / count;
+                data[idx + 3] = a / count;
+            }
+        }
+    }
+    
+    // 現在時刻におけるディフュージョンパラメータを取得（キーフレーム補間）
+    getDiffusionParamsAtTime(time) {
+        const keyframes = this.effects.diffusion.keyframes;
+        
+        // キーフレームが無い場合はデフォルト値を返す
+        if (!keyframes || keyframes.length === 0) {
+            return {
+                blur: this.effects.diffusion.blur,
+                contrast: this.effects.diffusion.contrast,
+                brightness: this.effects.diffusion.brightness,
+                saturation: this.effects.diffusion.saturation,
+                opacity: this.effects.diffusion.opacity
+            };
+        }
+        
+        // キーフレームを時刻順にソート
+        const sortedKeyframes = [...keyframes].sort((a, b) => a.time - b.time);
+        
+        // 現在時刻より前のキーフレームと後のキーフレームを見つける
+        let beforeKf = null;
+        let afterKf = null;
+        
+        for (let i = 0; i < sortedKeyframes.length; i++) {
+            if (sortedKeyframes[i].time <= time) {
+                beforeKf = sortedKeyframes[i];
+            }
+            if (sortedKeyframes[i].time > time && !afterKf) {
+                afterKf = sortedKeyframes[i];
+                break;
+            }
+        }
+        
+        // 補間なし（キーフレームが1つ以下、または範囲外）
+        if (!beforeKf && !afterKf) {
+            return {
+                blur: this.effects.diffusion.blur,
+                contrast: this.effects.diffusion.contrast,
+                brightness: this.effects.diffusion.brightness,
+                saturation: this.effects.diffusion.saturation,
+                opacity: this.effects.diffusion.opacity
+            };
+        }
+        
+        if (beforeKf && !afterKf) {
+            // 最後のキーフレーム以降
+            return {
+                blur: beforeKf.blur,
+                contrast: beforeKf.contrast,
+                brightness: beforeKf.brightness,
+                saturation: beforeKf.saturation,
+                opacity: beforeKf.opacity
+            };
+        }
+        
+        if (!beforeKf && afterKf) {
+            // 最初のキーフレームより前
+            return {
+                blur: afterKf.blur,
+                contrast: afterKf.contrast,
+                brightness: afterKf.brightness,
+                saturation: afterKf.saturation,
+                opacity: afterKf.opacity
+            };
+        }
+        
+        // 線形補間
+        const t = (time - beforeKf.time) / (afterKf.time - beforeKf.time);
+        return {
+            blur: beforeKf.blur + (afterKf.blur - beforeKf.blur) * t,
+            contrast: beforeKf.contrast + (afterKf.contrast - beforeKf.contrast) * t,
+            brightness: beforeKf.brightness + (afterKf.brightness - beforeKf.brightness) * t,
+            saturation: beforeKf.saturation + (afterKf.saturation - beforeKf.saturation) * t,
+            opacity: beforeKf.opacity + (afterKf.opacity - beforeKf.opacity) * t
+        };
     }
     
     hexToRgba(hex, alpha) {
@@ -2311,8 +2650,11 @@ class StarlitTimelineApp {
             // エフェクトのenabledフラグのみ保存（パラメーターはlocalStorageに保存済み）
             effectsEnabled: {
                 letterbox: this.effects.letterbox.enabled,
-                gradient: this.effects.gradient.enabled
+                gradient: this.effects.gradient.enabled,
+                diffusion: this.effects.diffusion.enabled
             },
+            // ディフュージョンキーフレームはプロジェクトに保存
+            diffusionKeyframes: this.effects.diffusion.keyframes,
             settings: {
                 fps: this.fps,
                 duration: this.duration,
@@ -2401,6 +2743,13 @@ class StarlitTimelineApp {
                 if (project.effectsEnabled) {
                     this.effects.letterbox.enabled = project.effectsEnabled.letterbox || false;
                     this.effects.gradient.enabled = project.effectsEnabled.gradient || false;
+                    this.effects.diffusion.enabled = project.effectsEnabled.diffusion || false;
+                }
+                
+                // ディフュージョンキーフレームを復元
+                if (project.diffusionKeyframes) {
+                    this.effects.diffusion.keyframes = project.diffusionKeyframes;
+                    this.updateDiffusionKeyframeList();
                 }
                 
                 // UIを更新
@@ -2611,6 +2960,13 @@ class StarlitTimelineApp {
                         opacity: this.effects.gradient.bottom.opacity,
                         blendMode: this.effects.gradient.bottom.blendMode
                     }
+                },
+                diffusion: {
+                    blur: this.effects.diffusion.blur,
+                    contrast: this.effects.diffusion.contrast,
+                    brightness: this.effects.diffusion.brightness,
+                    saturation: this.effects.diffusion.saturation,
+                    opacity: this.effects.diffusion.opacity
                 }
             }
         };
@@ -2678,6 +3034,16 @@ class StarlitTimelineApp {
                             this.effects.gradient.bottom.blendMode = grad.bottom.blendMode || 'normal';
                         }
                     }
+                    
+                    // ディフュージョンパラメーター
+                    if (settings.effectParameters.diffusion) {
+                        const diff = settings.effectParameters.diffusion;
+                        this.effects.diffusion.blur = diff.blur || 0;
+                        this.effects.diffusion.contrast = diff.contrast || 0;
+                        this.effects.diffusion.brightness = diff.brightness || 0;
+                        this.effects.diffusion.saturation = diff.saturation || 0;
+                        this.effects.diffusion.opacity = diff.opacity !== undefined ? diff.opacity : 100;
+                    }
                 }
                 
                 // UIを更新
@@ -2726,6 +3092,22 @@ class StarlitTimelineApp {
         document.getElementById('gradientBottomOpacity').value = this.effects.gradient.bottom.opacity;
         document.getElementById('gradientBottomOpacityValue').textContent = `${this.effects.gradient.bottom.opacity}%`;
         document.getElementById('gradientBottomBlendMode').value = this.effects.gradient.bottom.blendMode;
+        
+        // ディフュージョン
+        document.getElementById('diffusionEnable').checked = this.effects.diffusion.enabled;
+        document.getElementById('diffusionBlur').value = this.effects.diffusion.blur;
+        document.getElementById('diffusionBlurValue').textContent = `${this.effects.diffusion.blur}`;
+        document.getElementById('diffusionContrast').value = this.effects.diffusion.contrast;
+        document.getElementById('diffusionContrastValue').textContent = `${this.effects.diffusion.contrast}`;
+        document.getElementById('diffusionBrightness').value = this.effects.diffusion.brightness;
+        document.getElementById('diffusionBrightnessValue').textContent = `${this.effects.diffusion.brightness}`;
+        document.getElementById('diffusionSaturation').value = this.effects.diffusion.saturation;
+        document.getElementById('diffusionSaturationValue').textContent = `${this.effects.diffusion.saturation}`;
+        document.getElementById('diffusionOpacity').value = this.effects.diffusion.opacity;
+        document.getElementById('diffusionOpacityValue').textContent = `${this.effects.diffusion.opacity}%`;
+        
+        // キーフレームリスト更新
+        this.updateDiffusionKeyframeList();
     }
     
     // 通知表示
@@ -2777,6 +3159,13 @@ class StarlitTimelineApp {
                             opacity: this.effects.gradient.bottom.opacity,
                             blendMode: this.effects.gradient.bottom.blendMode
                         }
+                    },
+                    diffusion: {
+                        blur: this.effects.diffusion.blur,
+                        contrast: this.effects.diffusion.contrast,
+                        brightness: this.effects.diffusion.brightness,
+                        saturation: this.effects.diffusion.saturation,
+                        opacity: this.effects.diffusion.opacity
                     }
                 }
             };
@@ -2816,6 +3205,16 @@ class StarlitTimelineApp {
                             this.effects.gradient.bottom.opacity = grad.bottom.opacity;
                             this.effects.gradient.bottom.blendMode = grad.bottom.blendMode || 'normal';
                         }
+                    }
+                    
+                    // ディフュージョンパラメーター
+                    if (settings.effectParameters.diffusion) {
+                        const diff = settings.effectParameters.diffusion;
+                        this.effects.diffusion.blur = diff.blur || 0;
+                        this.effects.diffusion.contrast = diff.contrast || 0;
+                        this.effects.diffusion.brightness = diff.brightness || 0;
+                        this.effects.diffusion.saturation = diff.saturation || 0;
+                        this.effects.diffusion.opacity = diff.opacity !== undefined ? diff.opacity : 100;
                     }
                 }
                 
