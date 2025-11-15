@@ -435,6 +435,7 @@ class StarlitTimelineApp {
             startTime: Math.max(0, startTime),
             duration: defaultDuration,
             originalDuration: defaultDuration, // 元の長さを保存
+            offset: 0, // オフセット（トリミング用）
             volume: 1.0, // 音量 (0.0 - 1.0)
             loopCount: 1, // ループ回数
             useOriginalSize: true, // 原寸表示フラグ
@@ -556,7 +557,10 @@ class StarlitTimelineApp {
         const ctx = this.timelineCtx;
         const x = clip.startTime * this.zoom;
         const y = clip.track * this.trackHeight + 5;
-        const width = clip.duration * this.zoom;
+        
+        // offset を考慮した実際の表示幅を計算
+        const visibleDuration = clip.duration - (clip.offset || 0);
+        const width = visibleDuration * this.zoom;
         const height = this.trackHeight - 10;
         const radius = 8; // 角丸の半径
         
@@ -587,6 +591,17 @@ class StarlitTimelineApp {
         ctx.strokeStyle = '#5D3A1A';
         ctx.lineWidth = 2;
         ctx.stroke();
+        
+        // オフセットインジケーター（トリミングされている場合）
+        if (clip.offset && clip.offset > 0) {
+            // 左端にオレンジのトリミングマーク
+            ctx.fillStyle = 'rgba(255, 140, 0, 0.7)';
+            ctx.fillRect(x, y, 4, height);
+            
+            ctx.fillStyle = '#FF8C00';
+            ctx.font = 'bold 10px sans-serif';
+            ctx.fillText('✂', x + 6, y + 15);
+        }
         
         // アイコンとテキスト
         const icon = {
@@ -845,7 +860,9 @@ class StarlitTimelineApp {
         console.log('isDragging:', this.isDragging);
         console.log('クリップ数:', this.clips.length);
         
-        if (this.isDragging) {
+        if (this.isDragging && this.isMovingClip && this.selectedClip) {
+            // オートトリミング処理を実行
+            this.autoTrimCollisions(this.selectedClip);
             this.saveHistory();
         }
         this.isDragging = false;
@@ -858,7 +875,10 @@ class StarlitTimelineApp {
         for (let clip of this.clips) {
             const clipX = clip.startTime * this.zoom;
             const clipY = clip.track * this.trackHeight;
-            const clipWidth = clip.duration * this.zoom;
+            
+            // offsetを考慮した実際の表示幅
+            const visibleDuration = clip.duration - (clip.offset || 0);
+            const clipWidth = visibleDuration * this.zoom;
             const clipHeight = this.trackHeight;
             
             if (x >= clipX && x <= clipX + clipWidth &&
@@ -867,6 +887,82 @@ class StarlitTimelineApp {
             }
         }
         return null;
+    }
+    
+    // オートトリミング機能
+    autoTrimCollisions(movedClip) {
+        console.log('=== オートトリミング開始 ===');
+        
+        // 移動したクリップの範囲を計算
+        const movedStart = movedClip.startTime;
+        const movedEnd = movedClip.startTime + movedClip.duration - movedClip.offset;
+        
+        console.log(`移動クリップ: ${movedClip.asset.name}`);
+        console.log(`移動クリップ範囲: ${movedStart.toFixed(2)}秒 ～ ${movedEnd.toFixed(2)}秒`);
+        
+        // 同じトラックの他のクリップをチェック
+        for (let otherClip of this.clips) {
+            // 自分自身はスキップ
+            if (otherClip === movedClip) continue;
+            
+            // 別のトラックはスキップ
+            if (otherClip.track !== movedClip.track) continue;
+            
+            // 他のクリップの範囲を計算
+            const otherStart = otherClip.startTime;
+            const otherEnd = otherClip.startTime + otherClip.duration - otherClip.offset;
+            
+            console.log(`チェック中: ${otherClip.asset.name} (${otherStart.toFixed(2)}秒 ～ ${otherEnd.toFixed(2)}秒)`);
+            
+            // パターン1: 移動クリップが左から押す（他のクリップの頭をトリミング）
+            if (movedEnd > otherStart && movedEnd < otherEnd && movedStart < otherStart) {
+                const overlap = movedEnd - otherStart;
+                console.log(`前方衝突: ${otherClip.asset.name} の頭を ${overlap.toFixed(2)}秒 トリミング`);
+                
+                // 他のクリップの頭をカット
+                otherClip.offset += overlap;
+                otherClip.startTime = movedEnd;
+                
+                // 最小デュレーション確認
+                const visibleDuration = otherClip.duration - otherClip.offset;
+                if (visibleDuration < 0.1) {
+                    otherClip.offset = otherClip.duration - 0.1;
+                    otherClip.startTime = movedEnd;
+                }
+            }
+            
+            // パターン2: 移動クリップが右から押す（他のクリップの後ろをトリミング）
+            else if (movedStart < otherEnd && movedStart > otherStart && movedEnd > otherEnd) {
+                const overlap = otherEnd - movedStart;
+                console.log(`後方衝突: ${otherClip.asset.name} の後ろを ${overlap.toFixed(2)}秒 トリミング`);
+                
+                // 他のクリップの後ろをカット
+                const visibleDuration = otherClip.duration - otherClip.offset;
+                const newVisibleDuration = visibleDuration - overlap;
+                
+                // 最小デュレーション確認
+                if (newVisibleDuration < 0.1) {
+                    otherClip.duration = otherClip.offset + 0.1;
+                } else {
+                    otherClip.duration = otherClip.offset + newVisibleDuration;
+                }
+            }
+            
+            // パターン3: 移動クリップが完全に覆う（他のクリップを後方へ移動）
+            else if (movedStart <= otherStart && movedEnd >= otherEnd) {
+                console.log(`完全衝突: ${otherClip.asset.name} が完全に覆われました`);
+                
+                // 他のクリップを後方へ移動
+                otherClip.startTime = movedEnd;
+                otherClip.offset = 0; // オフセットをリセット
+            }
+        }
+        
+        // タイムラインを再描画
+        this.drawTimeline();
+        this.updatePropertiesPanel();
+        
+        console.log('=== オートトリミング完了 ===');
     }
     
     // プロパティパネル
@@ -880,6 +976,9 @@ class StarlitTimelineApp {
         
         const clip = this.selectedClip;
         const localTime = this.currentTime - clip.startTime;
+        
+        // 実際の表示時間を計算
+        const visibleDuration = clip.duration - (clip.offset || 0);
         
         let propertiesHTML = `
             <div class="property-group">
@@ -901,6 +1000,16 @@ class StarlitTimelineApp {
                     oninput="app.updateClipProperty('duration', parseFloat(this.value)); document.getElementById('durationValue').textContent = this.value + '秒'">
             </div>
         `;
+        
+        // オフセット表示（トリミングされている場合）
+        if (clip.offset && clip.offset > 0) {
+            propertiesHTML += `
+                <div class="property-group" style="background-color: rgba(255, 140, 0, 0.1); padding: 8px; border-radius: 4px;">
+                    <div class="property-label">✂ オフセット: <span style="color: #FF8C00; font-weight: bold;">${clip.offset.toFixed(2)}秒</span></div>
+                    <div class="property-label" style="font-size: 11px; color: #666;">表示時間: ${visibleDuration.toFixed(2)}秒</div>
+                </div>
+            `;
+        }
         
         // 連番アニメーションの場合はフレームレート設定
         if (clip.asset.type === 'sequence') {
