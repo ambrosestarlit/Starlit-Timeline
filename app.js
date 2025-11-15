@@ -174,6 +174,7 @@ class StarlitTimelineApp {
         
         // プレビューキャンバスでの直感的操作
         this.previewCanvas.addEventListener('mousedown', (e) => this.handlePreviewMouseDown(e));
+        this.previewCanvas.addEventListener('mousemove', (e) => this.handlePreviewCanvasHover(e));
         document.addEventListener('mousemove', (e) => this.handlePreviewMouseMove(e));
         document.addEventListener('mouseup', (e) => this.handlePreviewMouseUp(e));
         
@@ -3617,8 +3618,90 @@ class StarlitTimelineApp {
     }
     
     // プレビューキャンバスでのマウス操作
+    handlePreviewCanvasHover(e) {
+        if (this.isPreviewDragging || !this.selectedClip || !this.boundingBoxCache) {
+            return;
+        }
+        
+        const rect = this.previewCanvas.getBoundingClientRect();
+        
+        // プレビューズームを考慮した座標変換
+        const zoomFactor = this.previewZoom / 100;
+        
+        // CSSピクセルからキャンバスピクセルに変換(ズーム考慮)
+        const scaleX = this.previewCanvas.width / (rect.width / zoomFactor);
+        const scaleY = this.previewCanvas.height / (rect.height / zoomFactor);
+        
+        // マウス座標をキャンバス中心からの相対座標に変換
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        const relativeX = (e.clientX - centerX) / zoomFactor;
+        const relativeY = (e.clientY - centerY) / zoomFactor;
+        
+        // キャンバス座標系に変換
+        const mouseX = this.previewCanvas.width / 2 + relativeX * scaleX;
+        const mouseY = this.previewCanvas.height / 2 + relativeY * scaleY;
+        
+        const handleHitArea = 15;
+        
+        // 回転ハンドルの判定
+        const rotateHandle = this.boundingBoxCache.rotateHandle;
+        const distToRotate = Math.sqrt(
+            Math.pow(mouseX - rotateHandle.screenX, 2) + 
+            Math.pow(mouseY - rotateHandle.screenY, 2)
+        );
+        
+        if (distToRotate < handleHitArea) {
+            this.previewCanvas.style.cursor = 'grab';
+            console.log('Hover: Rotate handle');
+            return;
+        }
+        
+        // 各ハンドルの判定
+        for (let handle of this.boundingBoxCache.handles) {
+            const dist = Math.sqrt(
+                Math.pow(mouseX - handle.screenX, 2) + 
+                Math.pow(mouseY - handle.screenY, 2)
+            );
+            
+            if (dist < handleHitArea) {
+                console.log('Hover: Handle', handle.type);
+                // ハンドルタイプに応じたカーソル
+                if (handle.type.startsWith('corner-tl') || handle.type.startsWith('corner-br')) {
+                    this.previewCanvas.style.cursor = 'nwse-resize';
+                } else if (handle.type.startsWith('corner-tr') || handle.type.startsWith('corner-bl')) {
+                    this.previewCanvas.style.cursor = 'nesw-resize';
+                } else if (handle.type === 'edge-t' || handle.type === 'edge-b') {
+                    this.previewCanvas.style.cursor = 'ns-resize';
+                } else if (handle.type === 'edge-l' || handle.type === 'edge-r') {
+                    this.previewCanvas.style.cursor = 'ew-resize';
+                }
+                return;
+            }
+        }
+        
+        // バウンディングボックス内の判定
+        const bbox = this.boundingBoxCache;
+        const cos = Math.cos(-bbox.rotation * Math.PI / 180);
+        const sin = Math.sin(-bbox.rotation * Math.PI / 180);
+        
+        const localX = cos * (mouseX - bbox.centerX) - sin * (mouseY - bbox.centerY);
+        const localY = sin * (mouseX - bbox.centerX) + cos * (mouseY - bbox.centerY);
+        
+        if (Math.abs(localX) < bbox.scaledWidth / 2 && Math.abs(localY) < bbox.scaledHeight / 2) {
+            this.previewCanvas.style.cursor = 'move';
+            console.log('Hover: Inside bounding box');
+        } else {
+            this.previewCanvas.style.cursor = 'default';
+        }
+    }
+    
     handlePreviewMouseDown(e) {
-        if (!this.selectedClip || !this.boundingBoxCache) return;
+        console.log('Preview mousedown triggered');
+        if (!this.selectedClip || !this.boundingBoxCache) {
+            console.log('No selected clip or bounding box cache');
+            return;
+        }
         
         const rect = this.previewCanvas.getBoundingClientRect();
         
@@ -3650,9 +3733,11 @@ class StarlitTimelineApp {
         );
         
         if (distToRotate < handleHitArea) {
+            console.log('Clicked rotate handle');
             this.isPreviewDragging = true;
             this.previewDragStart = { x: mouseX, y: mouseY };
             this.previewDragMode = 'rotate';
+            this.previewCanvas.style.cursor = 'grabbing';
             
             const localTime = this.currentTime - this.selectedClip.startTime;
             this.initialTransform = {
@@ -3675,6 +3760,7 @@ class StarlitTimelineApp {
             );
             
             if (dist < handleHitArea) {
+                console.log('Clicked handle:', handle.type);
                 this.isPreviewDragging = true;
                 this.previewDragStart = { x: mouseX, y: mouseY };
                 this.previewDragMode = handle.type;
@@ -3704,6 +3790,7 @@ class StarlitTimelineApp {
         const localY = sin * (mouseX - bbox.centerX) + cos * (mouseY - bbox.centerY);
         
         if (Math.abs(localX) < bbox.scaledWidth / 2 && Math.abs(localY) < bbox.scaledHeight / 2) {
+            console.log('Clicked inside bounding box for move');
             this.isPreviewDragging = true;
             this.previewDragStart = { x: mouseX, y: mouseY };
             this.previewDragMode = 'move';
@@ -3809,6 +3896,7 @@ class StarlitTimelineApp {
             this.previewDragMode = null;
             this.initialTransform = null;
             this.activeHandle = null;
+            this.previewCanvas.style.cursor = 'default';
             this.saveHistory();
         }
     }
