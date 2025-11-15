@@ -127,7 +127,6 @@ class StarlitTimelineApp {
         this.seekbarImage = new Image();
         this.seekbarImage.onload = () => {
             this.drawTimeline(); // 画像読み込み完了後に再描画
-            this.drawRuler();    // ルーラーも再描画してくまを表示
         };
         this.seekbarImage.src = 'seekbar.png';
         
@@ -204,11 +203,6 @@ class StarlitTimelineApp {
         const timelineScroll = document.getElementById('timelineScroll');
         timelineScroll.addEventListener('drop', (e) => this.handleAssetDrop(e));
         timelineScroll.addEventListener('dragover', (e) => e.preventDefault());
-        
-        // タイムラインスクロール時にルーラーを再描画(くまを追従させる)
-        timelineScroll.addEventListener('scroll', () => {
-            this.drawRuler();
-        });
         
         // キーボードショートカット
         document.addEventListener('keydown', (e) => this.handleKeyDown(e));
@@ -998,7 +992,17 @@ class StarlitTimelineApp {
         ctx.lineTo(x, this.timelineCanvas.height);
         ctx.stroke();
         
-        // くまはルーラー側に描画するのでここでは描画しない
+        // プレイヘッドトップ(くま画像) - 位置を下にずらしてルーラーの下に表示
+        const bearSize = 36;
+        if (this.seekbarImage && this.seekbarImage.complete) {
+            ctx.drawImage(
+                this.seekbarImage,
+                x - bearSize / 2,
+                10, // 10px下にずらしてルーラーに隠れないように
+                bearSize,
+                bearSize
+            );
+        }
     }
     
     drawRuler() {
@@ -1031,19 +1035,7 @@ class StarlitTimelineApp {
             ctx.fillText(timeStr, x + 2, height - 12);
         }
         
-        // シークバー(くま)をルーラー上に描画
-        const playheadX = this.currentTime * this.zoom - scrollLeft;
-        const bearSize = 36;
-        
-        if (this.seekbarImage && this.seekbarImage.complete) {
-            ctx.drawImage(
-                this.seekbarImage,
-                playheadX - bearSize / 2,
-                -6, // ルーラーの上に突き出す
-                bearSize,
-                bearSize
-            );
-        }
+        // くまはタイムラインキャンバス側に描画するのでここでは描画しない
     }
     
     // タイムライン操作
