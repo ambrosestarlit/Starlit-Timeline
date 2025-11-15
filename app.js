@@ -1966,7 +1966,10 @@ class StarlitTimelineApp {
         // 現在時刻のパラメータを取得（キーフレーム補間）
         const params = this.getDiffusionParamsAtTime(this.currentTime);
         
-        // 元の画像データを取得
+        // 元の画像データを保存（不透明度調整用）
+        const originalImageData = ctx.getImageData(0, 0, width, height);
+        
+        // エフェクト適用用の画像データを取得
         const imageData = ctx.getImageData(0, 0, width, height);
         const data = imageData.data;
         
@@ -2012,15 +2015,22 @@ class StarlitTimelineApp {
             data[i + 2] = b;
         }
         
+        // 3. 不透明度調整（元画像とエフェクト適用画像をブレンド）
+        if (params.opacity < 100) {
+            const opacityFactor = params.opacity / 100;
+            const originalData = originalImageData.data;
+            
+            for (let i = 0; i < data.length; i += 4) {
+                // エフェクト適用画像と元画像をブレンド
+                data[i] = originalData[i] * (1 - opacityFactor) + data[i] * opacityFactor;
+                data[i + 1] = originalData[i + 1] * (1 - opacityFactor) + data[i + 1] * opacityFactor;
+                data[i + 2] = originalData[i + 2] * (1 - opacityFactor) + data[i + 2] * opacityFactor;
+                // アルファチャンネルはそのまま
+            }
+        }
+        
         // 画像データを戻す
         ctx.putImageData(imageData, 0, 0);
-        
-        // 3. 不透明度調整（オーバーレイとして）
-        if (params.opacity < 100) {
-            ctx.globalAlpha = params.opacity / 100;
-            ctx.globalCompositeOperation = 'source-over';
-            ctx.globalAlpha = 1.0;
-        }
     }
     
     // 簡易ブラー実装（ボックスブラー）
