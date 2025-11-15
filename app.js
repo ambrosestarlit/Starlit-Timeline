@@ -710,6 +710,7 @@ class StarlitTimelineApp {
             originalDuration: defaultDuration, // 元の長さを保存
             offset: 0, // オフセット（トリミング用）
             volume: 1.0, // 音量 (0.0 - 1.0)
+            pan: 0, // パン (-1.0 左 ～ 0 中央 ～ 1.0 右)
             loopCount: 1, // ループ回数
             useOriginalSize: true, // 原寸表示フラグ
             transitionIn: {
@@ -725,7 +726,8 @@ class StarlitTimelineApp {
                 y: [{time: 0, value: 0}],
                 rotation: [{time: 0, value: 0}],
                 opacity: [{time: 0, value: 1}],
-                scale: [{time: 0, value: 1}]
+                scale: [{time: 0, value: 1}],
+                pan: [{time: 0, value: 0}] // パンのキーフレーム
             }
         };
         
@@ -773,6 +775,18 @@ class StarlitTimelineApp {
     prepareAudioClip(clip) {
         clip.audioElement = new Audio(clip.asset.url);
         clip.audioElement.preload = 'auto';
+        
+        // Web Audio APIのノードを作成
+        if (!clip.audioSource) {
+            clip.audioSource = this.audioContext.createMediaElementSource(clip.audioElement);
+            clip.gainNode = this.audioContext.createGain();
+            clip.panNode = this.audioContext.createStereoPanner();
+            
+            // ノードを接続: audioSource → panNode → gainNode → destination
+            clip.audioSource.connect(clip.panNode);
+            clip.panNode.connect(clip.gainNode);
+            clip.gainNode.connect(this.audioContext.destination);
+        }
     }
     
     // タイムライン描画
@@ -1586,6 +1600,8 @@ class StarlitTimelineApp {
         
         // 音声クリップの場合はボリューム設定
         if (clip.asset.type === 'audio' || clip.asset.type === 'video') {
+            const currentPan = this.getKeyframeValue(clip, 'pan', localTime);
+            
             propertiesHTML += `
                 <div class="property-section-header" onclick="app.togglePropertySection('audio')">
                     <span class="section-toggle-icon" id="audioToggle">▼</span>
@@ -1597,6 +1613,35 @@ class StarlitTimelineApp {
                         <input type="range" class="property-slider" value="${(clip.volume * 100).toFixed(0)}" 
                             min="0" max="100" step="1"
                             oninput="app.updateClipProperty('volume', parseFloat(this.value) / 100); document.getElementById('volumeValue').textContent = this.value + '%'">
+                    </div>
+                    
+                    <!-- PAN -->
+                    <div class="ae-property-group">
+                        <div class="ae-property-header" onclick="app.toggleAEProperty('pan')">
+                            <span class="ae-property-icon" id="panIcon">▶</span>
+                            <span class="ae-property-name">🎚️ パン</span>
+                            <span class="ae-property-value">${currentPan > 0 ? 'R' + (currentPan * 100).toFixed(0) : currentPan < 0 ? 'L' + (-currentPan * 100).toFixed(0) : 'C'}</span>
+                            <button class="ae-keyframe-indicator ${this.hasKeyframeAt(clip, 'pan', localTime) ? 'active' : ''}" 
+                                onclick="event.stopPropagation(); app.toggleKeyframe('pan')">💎</button>
+                        </div>
+                        <div class="ae-property-content collapsed" id="panContent">
+                            <div class="ae-subproperty">
+                                <div style="display: flex; justify-content: space-between; font-size: 11px; color: #999; margin-bottom: 4px;">
+                                    <span>L</span>
+                                    <span>C</span>
+                                    <span>R</span>
+                                </div>
+                                <input type="range" class="property-slider" value="${(currentPan * 100).toFixed(0)}" 
+                                    min="-100" max="100" step="1" id="panSlider"
+                                    oninput="
+                                        const v = parseFloat(this.value);
+                                        const label = v > 0 ? 'R' + v : v < 0 ? 'L' + (-v) : 'C';
+                                        document.querySelector('#panContent').parentElement.querySelector('.ae-property-value').textContent = label;
+                                        app.setKeyframeValueLive('pan', v / 100)
+                                    "
+                                    onchange="app.setKeyframeValue('pan', parseFloat(this.value) / 100)">
+                            </div>
+                        </div>
                     </div>
                 </div>
             `;
@@ -2044,10 +2089,21 @@ class StarlitTimelineApp {
             return;
         }
         
+        // パンとボリュームをキーフレームから取得
+        const pan = this.getKeyframeValue(clip, 'pan', localTime);
+        const volume = clip.volume || 1.0;
+        
+        // Web Audio APIノードに値を設定
+        if (clip.gainNode) {
+            clip.gainNode.gain.value = volume;
+        }
+        if (clip.panNode) {
+            clip.panNode.pan.value = pan;
+        }
+        
         if (this.isPlaying) {
             if (clip.audioElement.paused) {
                 clip.audioElement.currentTime = actualTime;
-                clip.audioElement.volume = clip.volume || 1.0;
                 clip.audioElement.play().catch(e => console.log('Audio play error:', e));
             }
         } else {
@@ -3470,6 +3526,14 @@ class StarlitTimelineApp {
                 ...clipData,
                 asset: asset
             };
+            
+            // 古いプロジェクトとの互換性：panが無い場合はデフォルト値を設定
+            if (clip.pan === undefined) {
+                clip.pan = 0;
+            }
+            if (!clip.keyframes.pan) {
+                clip.keyframes.pan = [{time: 0, value: 0}];
+            }
             
             // 音声素材の場合、AudioElementを準備
             if (asset.type === 'audio') {
