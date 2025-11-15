@@ -13,6 +13,9 @@ class StarlitTimelineApp {
         this.fps = 30;
         this.duration = 30; // seconds
         
+        // updatePreview実行中フラグ（重複実行防止）
+        this.isUpdatingPreview = false;
+        
         // キャンバス
         this.previewCanvas = document.getElementById('previewCanvas');
         this.previewCtx = this.previewCanvas.getContext('2d');
@@ -65,6 +68,29 @@ class StarlitTimelineApp {
             normalize: {
                 enabled: false,        // プロジェクトファイルに保存
                 strength: 1            // スムージング強度 0-3
+            },
+            windShake: {
+                enabled: false,      // プロジェクトファイルに保存
+                divisions: 10,       // 分割数 (1-50)
+                angle: 30,          // 揺れ角 (0-360度)
+                period: 2.0,        // 揺れ周期 (0.01-100秒)
+                phaseShift: 90,     // 揺れズレ (-360 to 360度)
+                center: 0,          // センター角度 (-180 to 180度)
+                topFixed: 10,       // 上固定長％ (0-100)
+                bottomFixed: 10,    // 下固定長％ (0-100)
+                fromBottom: false,  // 下を基準にするか
+                randomSwing: false, // ランダム揺れを使用
+                randomPattern: 0,   // ランダムパターンシード
+                timeShift: 0.1,     // 時間ずれ
+                horizontalRepeat: false,  // 横に繰り返す
+                repeatCount: 3,     // 繰り返し個数
+                spacing: 50,        // 間隔(ピクセル)
+                alphaCorrection: true,    // アルファ補正
+                antiAliasing: true,       // 破綻軽減(アンチエイリアシング) - デフォルトON
+                axisMode: false,    // 軸モードを有効化
+                axisPosition: 50,   // 軸位置 (0-100%)
+                axisStrength: 50,   // 揺れ強度 (0-100)
+                axisRange: 30       // 影響範囲 (1-100%)
             }
         };
         
@@ -138,6 +164,16 @@ class StarlitTimelineApp {
         
         // スポイトモード
         this.eyedropperMode = false;
+        
+        // WindShake軸選択モード
+        this.windShakeAxisPickMode = false;
+        
+        // レンズブラーのフォーカス位置選択モード
+        this.lensBlurFocusPickMode = false;
+        
+        // インアウトポイント（ループ範囲）
+        this.inPoint = null;  // null = 未設定
+        this.outPoint = null; // null = 未設定
         
         // FFmpeg.wasm for MP4 export
         this.ffmpeg = null;
@@ -259,6 +295,289 @@ class StarlitTimelineApp {
         document.getElementById('normalizeEnable').addEventListener('change', (e) => {
             this.effects.normalize.enabled = e.target.checked;
             this.updatePreview();
+        });
+        
+        // 風揺れエフェクトのイベントリスナー
+        this.setupWindShakeListeners();
+        this.setupBlurListeners();
+    }
+    
+    // 風揺れエフェクトのイベントリスナー設定
+    setupWindShakeListeners() {
+        document.getElementById('windShakeEnabled').addEventListener('change', (e) => {
+            if (this.selectedClip && this.selectedClip.windShake) {
+                this.selectedClip.windShake.enabled = e.target.checked;
+                this.updatePreview();
+            }
+        });
+
+        document.getElementById('windShakeDivisions').addEventListener('input', (e) => {
+            if (this.selectedClip && this.selectedClip.windShake) {
+                this.selectedClip.windShake.divisions = parseInt(e.target.value);
+                document.getElementById('windShakeDivisionsValue').textContent = e.target.value;
+                this.updatePreview();
+            }
+        });
+
+        document.getElementById('windShakeAngle').addEventListener('input', (e) => {
+            if (this.selectedClip && this.selectedClip.windShake) {
+                this.selectedClip.windShake.angle = parseFloat(e.target.value);
+                document.getElementById('windShakeAngleValue').textContent = e.target.value;
+                this.updatePreview();
+            }
+        });
+
+        document.getElementById('windShakePeriod').addEventListener('input', (e) => {
+            if (this.selectedClip && this.selectedClip.windShake) {
+                this.selectedClip.windShake.period = parseFloat(e.target.value);
+                const period = parseFloat(e.target.value);
+                document.getElementById('windShakePeriodValue').textContent = period.toFixed(2);
+                
+                // ループ情報を更新
+                const loopTimes = [period, period * 2, period * 3, period * 4, period * 5].map(t => t.toFixed(2));
+                document.getElementById('windShakeLoopInfo').textContent = 
+                    `周期 ${period.toFixed(2)}秒 → ${loopTimes.join('秒, ')}秒でループ`;
+                
+                this.updatePreview();
+            }
+        });
+
+        document.getElementById('windShakePhaseShift').addEventListener('input', (e) => {
+            if (this.selectedClip && this.selectedClip.windShake) {
+                this.selectedClip.windShake.phaseShift = parseFloat(e.target.value);
+                document.getElementById('windShakePhaseShiftValue').textContent = e.target.value;
+                this.updatePreview();
+            }
+        });
+
+        document.getElementById('windShakeCenter').addEventListener('input', (e) => {
+            if (this.selectedClip && this.selectedClip.windShake) {
+                this.selectedClip.windShake.center = parseFloat(e.target.value);
+                document.getElementById('windShakeCenterValue').textContent = e.target.value;
+                this.updatePreview();
+            }
+        });
+
+        document.getElementById('windShakeTopFixed').addEventListener('input', (e) => {
+            if (this.selectedClip && this.selectedClip.windShake) {
+                this.selectedClip.windShake.topFixed = parseFloat(e.target.value);
+                document.getElementById('windShakeTopFixedValue').textContent = e.target.value;
+                this.updatePreview();
+            }
+        });
+
+        document.getElementById('windShakeBottomFixed').addEventListener('input', (e) => {
+            if (this.selectedClip && this.selectedClip.windShake) {
+                this.selectedClip.windShake.bottomFixed = parseFloat(e.target.value);
+                document.getElementById('windShakeBottomFixedValue').textContent = e.target.value;
+                this.updatePreview();
+            }
+        });
+
+        document.getElementById('windShakeFromBottom').addEventListener('change', (e) => {
+            if (this.selectedClip && this.selectedClip.windShake) {
+                this.selectedClip.windShake.fromBottom = e.target.checked;
+                this.updatePreview();
+            }
+        });
+
+        document.getElementById('windShakeRandomSwing').addEventListener('change', (e) => {
+            if (this.selectedClip && this.selectedClip.windShake) {
+                this.selectedClip.windShake.randomSwing = e.target.checked;
+                this.updatePreview();
+            }
+        });
+
+        document.getElementById('windShakeRandomPattern').addEventListener('input', (e) => {
+            if (this.selectedClip && this.selectedClip.windShake) {
+                this.selectedClip.windShake.randomPattern = parseInt(e.target.value);
+                document.getElementById('windShakeRandomPatternValue').textContent = e.target.value;
+                this.updatePreview();
+            }
+        });
+
+        document.getElementById('windShakeHorizontalRepeat').addEventListener('change', (e) => {
+            if (this.selectedClip && this.selectedClip.windShake) {
+                this.selectedClip.windShake.horizontalRepeat = e.target.checked;
+                this.updatePreview();
+            }
+        });
+
+        document.getElementById('windShakeRepeatCount').addEventListener('input', (e) => {
+            if (this.selectedClip && this.selectedClip.windShake) {
+                this.selectedClip.windShake.repeatCount = parseInt(e.target.value);
+                document.getElementById('windShakeRepeatCountValue').textContent = e.target.value;
+                this.updatePreview();
+            }
+        });
+
+        document.getElementById('windShakeSpacing').addEventListener('input', (e) => {
+            if (this.selectedClip && this.selectedClip.windShake) {
+                this.selectedClip.windShake.spacing = parseFloat(e.target.value);
+                document.getElementById('windShakeSpacingValue').textContent = e.target.value;
+                this.updatePreview();
+            }
+        });
+
+        document.getElementById('windShakeTimeShift').addEventListener('input', (e) => {
+            if (this.selectedClip && this.selectedClip.windShake) {
+                this.selectedClip.windShake.timeShift = parseFloat(e.target.value);
+                document.getElementById('windShakeTimeShiftValue').textContent = parseFloat(e.target.value).toFixed(2);
+                this.updatePreview();
+            }
+        });
+
+        document.getElementById('windShakeAlphaCorrection').addEventListener('change', (e) => {
+            if (this.selectedClip && this.selectedClip.windShake) {
+                this.selectedClip.windShake.alphaCorrection = e.target.checked;
+                this.updatePreview();
+            }
+        });
+
+        document.getElementById('windShakeAntiAliasing').addEventListener('change', (e) => {
+            if (this.selectedClip && this.selectedClip.windShake) {
+                this.selectedClip.windShake.antiAliasing = e.target.checked;
+                this.updatePreview();
+            }
+        });
+
+        // プリセット選択
+        document.getElementById('windShakePreset').addEventListener('change', (e) => {
+            if (this.selectedClip && this.selectedClip.windShake) {
+                this.applyWindShakePreset(e.target.value);
+            }
+        });
+        
+        // 軸モード関連
+        document.getElementById('windShakeAxisMode').addEventListener('change', (e) => {
+            if (this.selectedClip && this.selectedClip.windShake) {
+                this.selectedClip.windShake.axisMode = e.target.checked;
+                // UIの有効/無効を切り替え
+                document.getElementById('windShakePickAxisBtn').disabled = !e.target.checked;
+                document.getElementById('windShakeAxisPosition').disabled = !e.target.checked;
+                document.getElementById('windShakeAxisStrength').disabled = !e.target.checked;
+                document.getElementById('windShakeAxisRange').disabled = !e.target.checked;
+                this.updatePreview();
+            }
+        });
+        
+        document.getElementById('windShakePickAxisBtn').addEventListener('click', () => {
+            if (this.selectedClip && this.selectedClip.windShake && this.selectedClip.windShake.axisMode) {
+                this.windShakeAxisPickMode = true;
+                document.getElementById('windShakePickAxisBtn').textContent = '🎯 クリックして軸を選択中...';
+                document.getElementById('windShakePickAxisBtn').style.background = '#ff6b9d';
+            }
+        });
+        
+        document.getElementById('windShakeAxisPosition').addEventListener('input', (e) => {
+            if (this.selectedClip && this.selectedClip.windShake) {
+                this.selectedClip.windShake.axisPosition = parseFloat(e.target.value);
+                document.getElementById('windShakeAxisPositionValue').textContent = e.target.value;
+                this.updatePreview();
+            }
+        });
+        
+        document.getElementById('windShakeAxisStrength').addEventListener('input', (e) => {
+            if (this.selectedClip && this.selectedClip.windShake) {
+                this.selectedClip.windShake.axisStrength = parseFloat(e.target.value);
+                document.getElementById('windShakeAxisStrengthValue').textContent = e.target.value;
+                this.updatePreview();
+            }
+        });
+        
+        document.getElementById('windShakeAxisRange').addEventListener('input', (e) => {
+            if (this.selectedClip && this.selectedClip.windShake) {
+                this.selectedClip.windShake.axisRange = parseFloat(e.target.value);
+                document.getElementById('windShakeAxisRangeValue').textContent = e.target.value;
+                this.updatePreview();
+            }
+        });
+    }
+    
+    setupBlurListeners() {
+        // ガウシアンブラー
+        document.getElementById('gaussianBlurEnabled').addEventListener('change', (e) => {
+            if (this.selectedClip && this.selectedClip.gaussianBlur) {
+                this.selectedClip.gaussianBlur.enabled = e.target.checked;
+                this.updatePreview();
+            }
+        });
+        
+        document.getElementById('gaussianBlurStrength').addEventListener('input', (e) => {
+            if (this.selectedClip && this.selectedClip.gaussianBlur) {
+                this.selectedClip.gaussianBlur.strength = parseFloat(e.target.value);
+                document.getElementById('gaussianBlurStrengthValue').textContent = e.target.value;
+                this.updatePreview();
+            }
+        });
+        
+        document.getElementById('gaussianBlurHorizontalOnly').addEventListener('change', (e) => {
+            if (this.selectedClip && this.selectedClip.gaussianBlur) {
+                this.selectedClip.gaussianBlur.horizontalOnly = e.target.checked;
+                if (e.target.checked) {
+                    document.getElementById('gaussianBlurVerticalOnly').checked = false;
+                    this.selectedClip.gaussianBlur.verticalOnly = false;
+                }
+                this.updatePreview();
+            }
+        });
+        
+        document.getElementById('gaussianBlurVerticalOnly').addEventListener('change', (e) => {
+            if (this.selectedClip && this.selectedClip.gaussianBlur) {
+                this.selectedClip.gaussianBlur.verticalOnly = e.target.checked;
+                if (e.target.checked) {
+                    document.getElementById('gaussianBlurHorizontalOnly').checked = false;
+                    this.selectedClip.gaussianBlur.horizontalOnly = false;
+                }
+                this.updatePreview();
+            }
+        });
+        
+        // レンズブラー
+        document.getElementById('lensBlurEnabled').addEventListener('change', (e) => {
+            if (this.selectedClip && this.selectedClip.lensBlur) {
+                this.selectedClip.lensBlur.enabled = e.target.checked;
+                this.updatePreview();
+            }
+        });
+        
+        document.getElementById('lensBlurPickFocusBtn').addEventListener('click', () => {
+            if (this.selectedClip && this.selectedClip.lensBlur) {
+                this.lensBlurFocusPickMode = true;
+                document.getElementById('lensBlurPickFocusBtn').textContent = '🎯 クリックしてフォーカス位置を選択中...';
+                document.getElementById('lensBlurPickFocusBtn').style.background = '#ff6b9d';
+            }
+        });
+        
+        document.getElementById('lensBlurFocusPosition').addEventListener('input', (e) => {
+            if (this.selectedClip && this.selectedClip.lensBlur) {
+                this.selectedClip.lensBlur.focusPosition = parseFloat(e.target.value);
+                document.getElementById('lensBlurFocusPositionValue').textContent = e.target.value;
+                this.updatePreview();
+            }
+        });
+        
+        document.getElementById('lensBlurFocusRange').addEventListener('input', (e) => {
+            if (this.selectedClip && this.selectedClip.lensBlur) {
+                this.selectedClip.lensBlur.focusRange = parseFloat(e.target.value);
+                document.getElementById('lensBlurFocusRangeValue').textContent = e.target.value;
+                this.updatePreview();
+            }
+        });
+        
+        document.getElementById('lensBlurStrength').addEventListener('input', (e) => {
+            if (this.selectedClip && this.selectedClip.lensBlur) {
+                this.selectedClip.lensBlur.strength = parseFloat(e.target.value);
+                document.getElementById('lensBlurStrengthValue').textContent = e.target.value;
+                this.updatePreview();
+            }
+        });
+        
+        document.getElementById('lensBlurInvert').addEventListener('change', (e) => {
+            if (this.selectedClip && this.selectedClip.lensBlur) {
+                this.selectedClip.lensBlur.invert = e.target.checked;
+                this.updatePreview();
+            }
         });
     }
     
@@ -728,6 +1047,43 @@ class StarlitTimelineApp {
                 opacity: [{time: 0, value: 1}],
                 scale: [{time: 0, value: 1}],
                 pan: [{time: 0, value: 0}] // パンのキーフレーム
+            },
+            windShake: {
+                enabled: false,
+                divisions: 10,
+                angle: 30,
+                period: 2.0,
+                phaseShift: 90,
+                center: 0,
+                topFixed: 10,
+                bottomFixed: 10,
+                fromBottom: false,
+                randomSwing: false,
+                randomPattern: 0,
+                timeShift: 0.1,
+                horizontalRepeat: false,
+                repeatCount: 3,
+                spacing: 50,
+                alphaCorrection: true,
+                antiAliasing: true,  // デフォルトON
+                seed: Math.random() * 10000,
+                axisMode: false,
+                axisPosition: 50,
+                axisStrength: 50,
+                axisRange: 30
+            },
+            gaussianBlur: {
+                enabled: false,
+                strength: 10,
+                horizontalOnly: false,
+                verticalOnly: false
+            },
+            lensBlur: {
+                enabled: false,
+                focusPosition: 50,  // Y位置 0-100%
+                focusRange: 20,     // フォーカス範囲
+                strength: 30,       // 最大ブラー強度
+                invert: false       // 反転モード
             }
         };
         
@@ -1048,10 +1404,41 @@ class StarlitTimelineApp {
         ctx.fillStyle = '#DEB887';
         ctx.fillRect(0, 0, width, height);
         
+        const scrollLeft = document.getElementById('timelineScroll').scrollLeft;
+        
+        // インアウトポイントの範囲を表示
+        if (this.inPoint !== null && this.outPoint !== null) {
+            const inX = this.inPoint * this.zoom - scrollLeft;
+            const outX = this.outPoint * this.zoom - scrollLeft;
+            const rangeWidth = outX - inX;
+            
+            ctx.fillStyle = 'rgba(210, 105, 30, 0.3)'; // 半透明のオレンジ
+            ctx.fillRect(inX, 0, rangeWidth, height);
+        }
+        
+        // インポイントマーカー
+        if (this.inPoint !== null) {
+            const inX = this.inPoint * this.zoom - scrollLeft;
+            ctx.fillStyle = '#00FF00';
+            ctx.fillRect(inX - 2, 0, 4, height);
+            ctx.fillStyle = '#5D3A1A';
+            ctx.font = 'bold 10px sans-serif';
+            ctx.fillText('IN', inX + 4, 10);
+        }
+        
+        // アウトポイントマーカー
+        if (this.outPoint !== null) {
+            const outX = this.outPoint * this.zoom - scrollLeft;
+            ctx.fillStyle = '#FF0000';
+            ctx.fillRect(outX - 2, 0, 4, height);
+            ctx.fillStyle = '#5D3A1A';
+            ctx.font = 'bold 10px sans-serif';
+            ctx.fillText('OUT', outX + 4, 10);
+        }
+        
         ctx.fillStyle = '#5D3A1A';
         ctx.font = '10px sans-serif';
         
-        const scrollLeft = document.getElementById('timelineScroll').scrollLeft;
         const startTime = Math.floor(scrollLeft / this.zoom);
         const endTime = Math.ceil((scrollLeft + width) / this.zoom);
         
@@ -1138,6 +1525,7 @@ class StarlitTimelineApp {
             console.log('ドラッグ開始 - isDragging:', this.isDragging);
             this.updatePropertiesPanel();
             this.drawTimeline();
+            this.updatePreview(); // バウンディングボックスを更新
             
             // ブラウザのドラッグ&ドロップを無効化
             e.preventDefault();
@@ -1696,6 +2084,107 @@ class StarlitTimelineApp {
                 }
             }
         });
+        
+        // 風揺れUIの更新
+        this.updateWindShakeUI();
+    }
+    
+    // 風揺れUIの更新
+    updateWindShakeUI() {
+        const clipPanel = document.getElementById('clipPropertiesPanel');
+        
+        if (!this.selectedClip) {
+            if (clipPanel) clipPanel.style.display = 'none';
+            return;
+        }
+        
+        if (clipPanel) clipPanel.style.display = 'block';
+        
+        if (!this.selectedClip.windShake) return;
+        
+        const ws = this.selectedClip.windShake;
+        
+        document.getElementById('windShakeEnabled').checked = ws.enabled || false;
+        document.getElementById('windShakeDivisions').value = ws.divisions || 10;
+        document.getElementById('windShakeDivisionsValue').textContent = ws.divisions || 10;
+        document.getElementById('windShakeAngle').value = ws.angle || 30;
+        document.getElementById('windShakeAngleValue').textContent = ws.angle || 30;
+        document.getElementById('windShakePeriod').value = ws.period || 2.0;
+        const period = ws.period || 2.0;
+        document.getElementById('windShakePeriodValue').textContent = period.toFixed(2);
+        
+        // ループ情報を更新
+        const loopTimes = [period, period * 2, period * 3, period * 4, period * 5].map(t => t.toFixed(2));
+        document.getElementById('windShakeLoopInfo').textContent = 
+            `周期 ${period.toFixed(2)}秒 → ${loopTimes.join('秒, ')}秒でループ`;
+        
+        document.getElementById('windShakePhaseShift').value = ws.phaseShift || 90;
+        document.getElementById('windShakePhaseShiftValue').textContent = ws.phaseShift || 90;
+        document.getElementById('windShakeCenter').value = ws.center || 0;
+        document.getElementById('windShakeCenterValue').textContent = ws.center || 0;
+        document.getElementById('windShakeTopFixed').value = ws.topFixed || 10;
+        document.getElementById('windShakeTopFixedValue').textContent = ws.topFixed || 10;
+        document.getElementById('windShakeBottomFixed').value = ws.bottomFixed || 10;
+        document.getElementById('windShakeBottomFixedValue').textContent = ws.bottomFixed || 10;
+        document.getElementById('windShakeFromBottom').checked = ws.fromBottom || false;
+        document.getElementById('windShakeRandomSwing').checked = ws.randomSwing || false;
+        document.getElementById('windShakeRandomPattern').value = ws.randomPattern || 0;
+        document.getElementById('windShakeRandomPatternValue').textContent = ws.randomPattern || 0;
+        document.getElementById('windShakeHorizontalRepeat').checked = ws.horizontalRepeat || false;
+        document.getElementById('windShakeRepeatCount').value = ws.repeatCount || 3;
+        document.getElementById('windShakeRepeatCountValue').textContent = ws.repeatCount || 3;
+        document.getElementById('windShakeSpacing').value = ws.spacing || 50;
+        document.getElementById('windShakeSpacingValue').textContent = ws.spacing || 50;
+        document.getElementById('windShakeTimeShift').value = ws.timeShift || 0.1;
+        document.getElementById('windShakeTimeShiftValue').textContent = (ws.timeShift || 0.1).toFixed(2);
+        document.getElementById('windShakeAlphaCorrection').checked = ws.alphaCorrection !== false;
+        document.getElementById('windShakeAntiAliasing').checked = ws.antiAliasing !== false;
+        
+        // 軸モードの更新
+        document.getElementById('windShakeAxisMode').checked = ws.axisMode || false;
+        document.getElementById('windShakeAxisPosition').value = ws.axisPosition || 50;
+        document.getElementById('windShakeAxisPositionValue').textContent = (ws.axisPosition || 50).toFixed(0);
+        document.getElementById('windShakeAxisStrength').value = ws.axisStrength || 50;
+        document.getElementById('windShakeAxisStrengthValue').textContent = ws.axisStrength || 50;
+        document.getElementById('windShakeAxisRange').value = ws.axisRange || 30;
+        document.getElementById('windShakeAxisRangeValue').textContent = ws.axisRange || 30;
+        
+        // UIの有効/無効を設定
+        const axisEnabled = ws.axisMode || false;
+        document.getElementById('windShakePickAxisBtn').disabled = !axisEnabled;
+        document.getElementById('windShakeAxisPosition').disabled = !axisEnabled;
+        document.getElementById('windShakeAxisStrength').disabled = !axisEnabled;
+        document.getElementById('windShakeAxisRange').disabled = !axisEnabled;
+        
+        // ブラーエフェクトの更新
+        if (this.selectedClip.gaussianBlur) {
+            const gb = this.selectedClip.gaussianBlur;
+            document.getElementById('gaussianBlurEnabled').checked = gb.enabled || false;
+            document.getElementById('gaussianBlurStrength').value = gb.strength || 10;
+            document.getElementById('gaussianBlurStrengthValue').textContent = gb.strength || 10;
+            document.getElementById('gaussianBlurHorizontalOnly').checked = gb.horizontalOnly || false;
+            document.getElementById('gaussianBlurVerticalOnly').checked = gb.verticalOnly || false;
+        }
+        
+        if (this.selectedClip.lensBlur) {
+            const lb = this.selectedClip.lensBlur;
+            document.getElementById('lensBlurEnabled').checked = lb.enabled || false;
+            document.getElementById('lensBlurFocusPosition').value = lb.focusPosition || 50;
+            document.getElementById('lensBlurFocusPositionValue').textContent = (lb.focusPosition || 50).toFixed(0);
+            document.getElementById('lensBlurFocusRange').value = lb.focusRange || 20;
+            document.getElementById('lensBlurFocusRangeValue').textContent = lb.focusRange || 20;
+            document.getElementById('lensBlurStrength').value = lb.strength || 30;
+            document.getElementById('lensBlurStrengthValue').textContent = lb.strength || 30;
+            document.getElementById('lensBlurInvert').checked = lb.invert || false;
+        }
+    }
+    
+    // クリップエフェクトの折りたたみ
+    toggleClipEffect(effectName) {
+        const controls = document.getElementById(effectName + 'Controls');
+        if (controls) {
+            controls.style.display = controls.style.display === 'none' ? 'block' : 'none';
+        }
     }
     
     // トランジション更新
@@ -1893,48 +2382,61 @@ class StarlitTimelineApp {
     }
     
     // プレビュー更新
-    updatePreview() {
-        const ctx = this.previewCtx;
-        const width = this.previewCanvas.width;
-        const height = this.previewCanvas.height;
-        
-        // 背景クリア
-        ctx.fillStyle = '#000000';
-        ctx.fillRect(0, 0, width, height);
-        
-        // アクティブなクリップを描画
-        const activeClips = this.clips.filter(clip => 
-            this.currentTime >= clip.startTime && 
-            this.currentTime < clip.startTime + clip.duration
-        ).sort((a, b) => a.track - b.track);
-        
-        // 範囲外の音声クリップを停止
-        this.clips.forEach(clip => {
-            if (clip.audioElement && !activeClips.includes(clip)) {
-                if (!clip.audioElement.paused) {
-                    clip.audioElement.pause();
-                }
-            }
-        });
-        
-        activeClips.forEach(clip => {
-            this.renderClip(clip);
-        });
-        
-        // エフェクト適用
-        this.applyEffects();
-        
-        // SVGオーバーレイをクリア
-        while (this.boundingBoxGroup.firstChild) {
-            this.boundingBoxGroup.removeChild(this.boundingBoxGroup.firstChild);
+    async updatePreview() {
+        // 既に実行中の場合はスキップ
+        if (this.isUpdatingPreview) {
+            return;
         }
         
-        // バウンディングボックスを描画（動画・画像・連番画像クリップを選択している場合のみ）
-        if (this.selectedClip && activeClips.includes(this.selectedClip)) {
-            const clipType = this.selectedClip.asset.type;
-            if (clipType === 'video' || clipType === 'image' || clipType === 'sequence') {
-                this.drawBoundingBox(this.selectedClip);
+        this.isUpdatingPreview = true;
+        
+        try {
+            const ctx = this.previewCtx;
+            const width = this.previewCanvas.width;
+            const height = this.previewCanvas.height;
+            
+            // 背景クリア
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, width, height);
+            
+            // アクティブなクリップを描画（トラック番号が小さいほど手前に描画）
+            const activeClips = this.clips.filter(clip => 
+                this.currentTime >= clip.startTime && 
+                this.currentTime < clip.startTime + clip.duration
+            ).sort((a, b) => b.track - a.track); // 逆順: トラック番号が大きい方から先に描画
+            
+            // 範囲外の音声クリップを停止
+            this.clips.forEach(clip => {
+                if (clip.audioElement && !activeClips.includes(clip)) {
+                    if (!clip.audioElement.paused) {
+                        clip.audioElement.pause();
+                    }
+                }
+            });
+            
+            // クリップを順番に描画（awaitで完了を待つ）
+            for (const clip of activeClips) {
+                await this.renderClip(clip);
             }
+            
+            // エフェクト適用
+            this.applyEffects();
+            
+            // SVGオーバーレイをクリア
+            while (this.boundingBoxGroup.firstChild) {
+                this.boundingBoxGroup.removeChild(this.boundingBoxGroup.firstChild);
+            }
+            
+            // バウンディングボックスを描画（動画・画像・連番画像クリップを選択している場合のみ）
+            if (this.selectedClip && activeClips.includes(this.selectedClip)) {
+                const clipType = this.selectedClip.asset.type;
+                if (clipType === 'video' || clipType === 'image' || clipType === 'sequence') {
+                    this.drawBoundingBox(this.selectedClip);
+                }
+            }
+        } finally {
+            // 必ずフラグをリセット
+            this.isUpdatingPreview = false;
         }
     }
     
@@ -2189,7 +2691,7 @@ class StarlitTimelineApp {
                 clip.imageElement = new Image();
                 clip.imageElement.onload = () => {
                     this.drawImageOnCanvas(clip);
-                    this.updatePreview(); // 読み込み完了後に再描画
+                    // updatePreviewの再帰呼び出しを削除（renderClip内で既に呼ばれている）
                     resolve();
                 };
                 clip.imageElement.onerror = () => {
@@ -2204,7 +2706,7 @@ class StarlitTimelineApp {
                 // 読み込み中の場合は待つ
                 clip.imageElement.onload = () => {
                     this.drawImageOnCanvas(clip);
-                    this.updatePreview();
+                    // updatePreviewの再帰呼び出しを削除
                     resolve();
                 };
             }
@@ -2241,7 +2743,194 @@ class StarlitTimelineApp {
             }
         }
         
-        ctx.drawImage(img, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+        // 風揺れエフェクトが有効な場合
+        if (clip.windShake && clip.windShake.enabled) {
+            const localTime = this.currentTime - clip.startTime;
+            this.applyWindShakeToImage(ctx, img, drawWidth, drawHeight, clip, localTime);
+        } else {
+            ctx.drawImage(img, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+        }
+        
+        // ブラーエフェクトが有効な場合のみ適用
+        const hasBlurEffect = (clip.gaussianBlur && clip.gaussianBlur.enabled && clip.gaussianBlur.strength > 0) ||
+                              (clip.lensBlur && clip.lensBlur.enabled && clip.lensBlur.strength > 0);
+        if (hasBlurEffect) {
+            this.applyBlurEffects(ctx, clip, drawWidth, drawHeight);
+        }
+    }
+    
+    applyBlurEffects(ctx, clip, width, height) {
+        // 変形状態を保存
+        const currentTransform = ctx.getTransform();
+        
+        // ガウシアンブラー
+        if (clip.gaussianBlur && clip.gaussianBlur.enabled && clip.gaussianBlur.strength > 0) {
+            const strength = clip.gaussianBlur.strength;
+            
+            // 変形をリセットして画像データを取得
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            
+            const centerX = this.previewCanvas.width / 2;
+            const centerY = this.previewCanvas.height / 2;
+            
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = width;
+            tempCanvas.height = height;
+            const tempCtx = tempCanvas.getContext('2d');
+            
+            // 描画済みの画像を一時キャンバスにコピー
+            tempCtx.drawImage(ctx.canvas, 
+                centerX - width / 2, 
+                centerY - height / 2, 
+                width, height,
+                0, 0, width, height);
+            
+            // ブラーを適用
+            if (clip.gaussianBlur.horizontalOnly) {
+                tempCtx.filter = `blur(${strength}px) blur(0px)`;
+            } else if (clip.gaussianBlur.verticalOnly) {
+                tempCtx.filter = `blur(0px) blur(${strength}px)`;
+            } else {
+                tempCtx.filter = `blur(${strength}px)`;
+            }
+            
+            const tempCanvas2 = document.createElement('canvas');
+            tempCanvas2.width = width;
+            tempCanvas2.height = height;
+            const tempCtx2 = tempCanvas2.getContext('2d');
+            tempCtx2.filter = tempCtx.filter;
+            tempCtx2.drawImage(tempCanvas, 0, 0);
+            
+            // 元の位置に描画し直す
+            ctx.drawImage(tempCanvas2, centerX - width / 2, centerY - height / 2);
+            
+            // 変形状態を復元
+            ctx.setTransform(currentTransform);
+        }
+        
+        // レンズブラー
+        if (clip.lensBlur && clip.lensBlur.enabled && clip.lensBlur.strength > 0) {
+            // 変形をリセットしてからレンズブラーを適用
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            this.applyLensBlur(ctx, clip, width, height);
+            // 変形状態を復元
+            ctx.setTransform(currentTransform);
+        }
+    }
+    
+    applyLensBlur(ctx, clip, width, height) {
+        const lb = clip.lensBlur;
+        const focusPos = lb.focusPosition / 100; // 0-1
+        const focusRange = lb.focusRange / 100; // 0-1
+        const maxStrength = lb.strength;
+        
+        // ボケ強度が低い場合は処理をスキップ
+        if (maxStrength < 1) return;
+        
+        const centerX = this.previewCanvas.width / 2;
+        const centerY = this.previewCanvas.height / 2;
+        
+        // 元の画像データを取得
+        const sourceImageData = ctx.getImageData(
+            centerX - width / 2,
+            centerY - height / 2,
+            width, height
+        );
+        
+        // 出力用の画像データを作成
+        const outputImageData = ctx.createImageData(width, height);
+        const src = sourceImageData.data;
+        const dst = outputImageData.data;
+        
+        // Y座標ごとにボケ強度マップを作成
+        const blurMap = new Float32Array(height);
+        for (let y = 0; y < height; y++) {
+            const normalizedY = y / height;
+            let distance = Math.abs(normalizedY - focusPos);
+            
+            let blurStrength = 0;
+            if (distance > focusRange) {
+                const beyondRange = (distance - focusRange) / Math.max(1 - focusRange, 0.01);
+                blurStrength = Math.min(beyondRange * maxStrength, maxStrength);
+            }
+            
+            if (lb.invert) {
+                blurStrength = maxStrength - blurStrength;
+            }
+            
+            blurMap[y] = blurStrength;
+        }
+        
+        // 各ピクセルに対して円形ボケを適用（最適化版）
+        const step = 2; // 処理を間引いて高速化
+        
+        for (let y = 0; y < height; y += step) {
+            for (let x = 0; x < width; x += step) {
+                const radius = blurMap[y];
+                
+                if (radius < 0.5) {
+                    // ボケなし - そのままコピー
+                    for (let dy = 0; dy < step && y + dy < height; dy++) {
+                        for (let dx = 0; dx < step && x + dx < width; dx++) {
+                            const idx = ((y + dy) * width + (x + dx)) * 4;
+                            dst[idx] = src[idx];
+                            dst[idx + 1] = src[idx + 1];
+                            dst[idx + 2] = src[idx + 2];
+                            dst[idx + 3] = src[idx + 3];
+                        }
+                    }
+                } else {
+                    // 円形ボケを適用
+                    let r = 0, g = 0, b = 0, a = 0;
+                    let count = 0;
+                    
+                    // 円形サンプリング（六角形ボケ風）
+                    const samples = Math.min(Math.max(6, Math.floor(radius * 2)), 36);
+                    
+                    for (let i = 0; i < samples; i++) {
+                        const angle = (i / samples) * Math.PI * 2;
+                        // 六角形に近い形状
+                        const hexFactor = 1.0 + 0.1 * Math.cos(angle * 6);
+                        const sampleRadius = radius * Math.sqrt(Math.random()) * hexFactor;
+                        
+                        const sx = Math.round(x + Math.cos(angle) * sampleRadius);
+                        const sy = Math.round(y + Math.sin(angle) * sampleRadius);
+                        
+                        if (sx >= 0 && sx < width && sy >= 0 && sy < height) {
+                            const sidx = (sy * width + sx) * 4;
+                            r += src[sidx];
+                            g += src[sidx + 1];
+                            b += src[sidx + 2];
+                            a += src[sidx + 3];
+                            count++;
+                        }
+                    }
+                    
+                    if (count > 0) {
+                        const avgR = r / count;
+                        const avgG = g / count;
+                        const avgB = b / count;
+                        const avgA = a / count;
+                        
+                        // stepサイズ分のピクセルに適用
+                        for (let dy = 0; dy < step && y + dy < height; dy++) {
+                            for (let dx = 0; dx < step && x + dx < width; dx++) {
+                                const idx = ((y + dy) * width + (x + dx)) * 4;
+                                dst[idx] = avgR;
+                                dst[idx + 1] = avgG;
+                                dst[idx + 2] = avgB;
+                                dst[idx + 3] = avgA;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // 結果を描画
+        ctx.putImageData(outputImageData, 
+            centerX - width / 2,
+            centerY - height / 2);
     }
     
     async drawVideo(clip, localTime) {
@@ -3023,6 +3712,19 @@ class StarlitTimelineApp {
         // ループ再生チェックボックスの状態を取得
         this.loopPlayback = document.getElementById('loopPlaybackCheckbox').checked;
         
+        // ループ範囲の決定
+        let loopStart = 0;
+        let loopEnd = this.duration;
+        
+        if (this.loopPlayback && this.inPoint !== null && this.outPoint !== null) {
+            loopStart = this.inPoint;
+            loopEnd = this.outPoint;
+            // 再生開始位置がループ範囲外なら範囲内に移動
+            if (this.currentTime < loopStart || this.currentTime >= loopEnd) {
+                this.currentTime = loopStart;
+            }
+        }
+        
         this.isPlaying = true;
         const playButton = document.getElementById('playButton');
         playButton.innerHTML = '<img src="pause.png" alt="一時停止" class="button-icon">';
@@ -3047,15 +3749,23 @@ class StarlitTimelineApp {
                 this.currentTime += framesToAdvance * frameInterval;
                 accumulatedTime -= framesToAdvance * frameInterval;
                 
-                if (this.currentTime >= this.duration) {
-                    if (this.loopPlayback) {
-                        // ループ再生の場合は最初に戻る
-                        this.currentTime = 0;
+                // ループ処理
+                if (this.loopPlayback && this.inPoint !== null && this.outPoint !== null) {
+                    // 選択範囲でのループ
+                    if (this.currentTime >= loopEnd) {
+                        this.currentTime = loopStart;
                         accumulatedTime = 0;
-                    } else {
-                        // ループしない場合は停止
-                        this.stop();
-                        return;
+                    }
+                } else {
+                    // 通常のループまたは停止
+                    if (this.currentTime >= this.duration) {
+                        if (this.loopPlayback) {
+                            this.currentTime = 0;
+                            accumulatedTime = 0;
+                        } else {
+                            this.stop();
+                            return;
+                        }
                     }
                 }
                 
@@ -3097,6 +3807,44 @@ class StarlitTimelineApp {
         this.updateTimeDisplay();
         this.updatePreview();
         this.drawTimeline();
+    }
+    
+    // インポイントを設定
+    setInPoint() {
+        this.inPoint = this.currentTime;
+        this.drawTimeline();
+        this.drawRuler();
+        this.showNotification(`📍 インポイント設定: ${this.formatTime(this.inPoint)}`);
+    }
+    
+    // アウトポイントを設定
+    setOutPoint() {
+        this.outPoint = this.currentTime;
+        if (this.inPoint !== null && this.outPoint < this.inPoint) {
+            // アウトポイントがインポイントより前の場合は入れ替え
+            [this.inPoint, this.outPoint] = [this.outPoint, this.inPoint];
+        }
+        this.drawTimeline();
+        this.drawRuler();
+        this.showNotification(`📍 アウトポイント設定: ${this.formatTime(this.outPoint)}`);
+    }
+    
+    // インアウトポイントをクリア
+    clearInOutPoints() {
+        this.inPoint = null;
+        this.outPoint = null;
+        this.drawTimeline();
+        this.drawRuler();
+        this.showNotification('❌ ループ範囲をクリアしました');
+    }
+    
+    // 時間をフォーマット
+    formatTime(seconds) {
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = Math.floor(seconds % 60);
+        const ms = Math.floor((seconds % 1) * 1000);
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(ms).padStart(3, '0')}`;
     }
     
     updateTimeDisplay() {
@@ -3256,6 +4004,22 @@ class StarlitTimelineApp {
                 this.pause();
             } else {
                 this.play();
+            }
+        }
+        
+        // I: インポイント設定
+        if (e.key === 'i' || e.key === 'I') {
+            if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+                e.preventDefault();
+                this.setInPoint();
+            }
+        }
+        
+        // O: アウトポイント設定
+        if (e.key === 'o' || e.key === 'O') {
+            if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+                e.preventDefault();
+                this.setOutPoint();
             }
         }
     }
@@ -3765,6 +4529,95 @@ class StarlitTimelineApp {
         event.target.value = '';
     }
     
+    // クリップエフェクト設定を保存
+    saveClipEffectSettings() {
+        if (!this.selectedClip) {
+            alert('クリップが選択されていません');
+            return;
+        }
+        
+        const settings = {
+            version: '1.0',
+            type: 'clip_effect_settings',
+            timestamp: new Date().toISOString(),
+            windShake: this.selectedClip.windShake,
+            gaussianBlur: this.selectedClip.gaussianBlur,
+            lensBlur: this.selectedClip.lensBlur
+        };
+        
+        // ファイルとして保存
+        const blob = new Blob([JSON.stringify(settings, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        
+        const date = new Date();
+        const dateStr = date.toISOString().slice(0, 19).replace(/:/g, '-');
+        a.download = `starlit_clip_effect_${dateStr}.json`;
+        
+        a.click();
+        URL.revokeObjectURL(url);
+        
+        this.showNotification('💾 クリップエフェクト設定を保存しました');
+    }
+    
+    // クリップエフェクト設定を読み込み
+    loadClipEffectSettings() {
+        if (!this.selectedClip) {
+            alert('クリップが選択されていません');
+            return;
+        }
+        document.getElementById('clipEffectSettingsInput').click();
+    }
+    
+    handleClipEffectSettingsLoad(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        
+        if (!this.selectedClip) {
+            alert('クリップが選択されていません');
+            event.target.value = '';
+            return;
+        }
+        
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const settings = JSON.parse(e.target.result);
+                
+                if (settings.type !== 'clip_effect_settings') {
+                    throw new Error('クリップエフェクト設定ファイルではありません');
+                }
+                
+                // windShake設定を復元
+                if (settings.windShake) {
+                    this.selectedClip.windShake = settings.windShake;
+                }
+                
+                // ブラーエフェクト設定を復元
+                if (settings.gaussianBlur) {
+                    this.selectedClip.gaussianBlur = settings.gaussianBlur;
+                }
+                
+                if (settings.lensBlur) {
+                    this.selectedClip.lensBlur = settings.lensBlur;
+                }
+                
+                // UIを更新
+                this.updateWindShakeUI();
+                this.updatePreview();
+                
+                this.showNotification('📂 クリップエフェクト設定を読み込みました');
+                
+            } catch (err) {
+                alert('クリップエフェクト設定の読み込みに失敗しました:\n' + err.message);
+            }
+        };
+        reader.readAsText(file);
+        
+        event.target.value = '';
+    }
+    
     // エフェクトUIを設定に合わせて更新
     updateEffectUI() {
         // レターボックス
@@ -4049,6 +4902,82 @@ class StarlitTimelineApp {
     }
     
     handlePreviewMouseDown(e) {
+        // レンズブラーのフォーカス位置選択モードの処理
+        if (this.lensBlurFocusPickMode && this.selectedClip) {
+            const rect = this.previewCanvas.getBoundingClientRect();
+            const zoomFactor = this.previewZoom / 100;
+            
+            const scaleY = this.previewCanvas.height / (rect.height / zoomFactor);
+            const centerY = rect.top + rect.height / 2;
+            const relativeY = (e.clientY - centerY) / zoomFactor;
+            const mouseY = this.previewCanvas.height / 2 + relativeY * scaleY;
+            
+            const clip = this.selectedClip;
+            const asset = this.assets.find(a => a.id === clip.assetId);
+            if (asset && asset.element) {
+                const imgHeight = asset.element.naturalHeight || asset.element.videoHeight || 1080;
+                const focusPosition = Math.max(0, Math.min(100, (mouseY / imgHeight) * 100));
+                
+                if (clip.lensBlur) {
+                    clip.lensBlur.focusPosition = focusPosition;
+                    document.getElementById('lensBlurFocusPosition').value = focusPosition;
+                    document.getElementById('lensBlurFocusPositionValue').textContent = focusPosition.toFixed(0);
+                    this.updatePreview();
+                }
+            }
+            
+            this.lensBlurFocusPickMode = false;
+            document.getElementById('lensBlurPickFocusBtn').textContent = '🎯 キャンバスをクリックしてフォーカス位置を選択';
+            document.getElementById('lensBlurPickFocusBtn').style.background = '';
+            this.previewCanvas.style.cursor = 'default';
+            
+            e.preventDefault();
+            return;
+        }
+        
+        // WindShake軸選択モードの処理
+        if (this.windShakeAxisPickMode && this.selectedClip) {
+            const rect = this.previewCanvas.getBoundingClientRect();
+            const zoomFactor = this.previewZoom / 100;
+            
+            // CSSピクセルからキャンバスピクセルに変換(ズーム考慮)
+            const scaleY = this.previewCanvas.height / (rect.height / zoomFactor);
+            
+            // マウス座標をキャンバス中心からの相対座標に変換
+            const centerY = rect.top + rect.height / 2;
+            const relativeY = (e.clientY - centerY) / zoomFactor;
+            
+            // キャンバス座標系に変換 (0-1080の範囲)
+            const mouseY = this.previewCanvas.height / 2 + relativeY * scaleY;
+            
+            // 画像の実際の高さを取得
+            const clip = this.selectedClip;
+            const asset = this.assets.find(a => a.id === clip.assetId);
+            if (asset && asset.element) {
+                const imgHeight = asset.element.naturalHeight || asset.element.videoHeight || 1080;
+                
+                // Y座標をパーセンテージに変換 (0-100)
+                const axisPosition = Math.max(0, Math.min(100, (mouseY / imgHeight) * 100));
+                
+                // UIを更新
+                if (clip.windShake) {
+                    clip.windShake.axisPosition = axisPosition;
+                    document.getElementById('windShakeAxisPosition').value = axisPosition;
+                    document.getElementById('windShakeAxisPositionValue').textContent = axisPosition.toFixed(0);
+                    this.updatePreview();
+                }
+            }
+            
+            // 軸選択モードを終了
+            this.windShakeAxisPickMode = false;
+            document.getElementById('windShakePickAxisBtn').textContent = '🎯 キャンバスをクリックして軸を選択';
+            document.getElementById('windShakePickAxisBtn').style.background = '';
+            this.previewCanvas.style.cursor = 'default';
+            
+            e.preventDefault();
+            return;
+        }
+        
         // console.log('Preview mousedown triggered');
         if (!this.selectedClip || !this.boundingBoxCache) {
             // console.log('No selected clip or bounding box cache');
@@ -4696,6 +5625,666 @@ class StarlitTimelineApp {
     
     async exportAudio() {
         alert('音声書き出し機能は開発中です');
+    }
+    
+    // ============================================================
+    // 風揺れエフェクト実装
+    // ============================================================
+    
+    // 風揺れエフェクトを画像に適用（WebGL版）
+    applyWindShakeWebGL(ctx, img, width, height, clip, localTime) {
+        // 一時キャンバスでWebGL処理
+        if (!this.windShakeCanvas) {
+            this.windShakeCanvas = document.createElement('canvas');
+            this.windShakeGL = this.windShakeCanvas.getContext('webgl', { 
+                premultipliedAlpha: false,
+                alpha: true 
+            });
+            this.initWindShakeWebGL();
+        }
+        
+        const gl = this.windShakeGL;
+        const canvas = this.windShakeCanvas;
+        
+        const ws = clip.windShake;
+        
+        // メッシュを生成してバウンディングボックスを取得
+        const meshData = this.createWindShakeMeshWithBounds(ws, width, height, localTime);
+        
+        // バウンディングボックスのサイズを計算（余裕を持たせる）
+        const padding = 100; // 余白ピクセル
+        const canvasWidth = meshData.bounds.width + padding * 2;
+        const canvasHeight = meshData.bounds.height + padding * 2;
+        
+        // キャンバスサイズを設定
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
+        gl.viewport(0, 0, canvasWidth, canvasHeight);
+        
+        // WebGLで描画
+        this.renderWindShakeWebGL(gl, img, meshData.mesh, canvasWidth, canvasHeight);
+        
+        // 結果をメインキャンバスに描画（元の画像中心に配置）
+        ctx.drawImage(canvas, -canvasWidth / 2, -canvasHeight / 2, canvasWidth, canvasHeight);
+    }
+    
+    // WebGL初期化
+    initWindShakeWebGL() {
+        const gl = this.windShakeGL;
+        
+        // 頂点シェーダー
+        const vertexShaderSource = `
+            attribute vec2 a_position;
+            attribute vec2 a_texCoord;
+            varying vec2 v_texCoord;
+            
+            void main() {
+                gl_Position = vec4(a_position, 0.0, 1.0);
+                v_texCoord = a_texCoord;
+            }
+        `;
+        
+        // フラグメントシェーダー
+        const fragmentShaderSource = `
+            precision mediump float;
+            varying vec2 v_texCoord;
+            uniform sampler2D u_image;
+            
+            void main() {
+                gl_FragColor = texture2D(u_image, v_texCoord);
+            }
+        `;
+        
+        // シェーダーをコンパイル
+        const vertexShader = this.createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+        const fragmentShader = this.createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+        
+        // プログラムを作成
+        this.windShakeProgram = this.createProgram(gl, vertexShader, fragmentShader);
+        
+        // アトリビュート・ユニフォームの位置を取得
+        this.windShakeProgramInfo = {
+            attribLocations: {
+                position: gl.getAttribLocation(this.windShakeProgram, 'a_position'),
+                texCoord: gl.getAttribLocation(this.windShakeProgram, 'a_texCoord'),
+            },
+            uniformLocations: {
+                image: gl.getUniformLocation(this.windShakeProgram, 'u_image'),
+            },
+        };
+    }
+    
+    // シェーダー作成
+    createShader(gl, type, source) {
+        const shader = gl.createShader(type);
+        gl.shaderSource(shader, source);
+        gl.compileShader(shader);
+        
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+            console.error('Shader compilation error:', gl.getShaderInfoLog(shader));
+            gl.deleteShader(shader);
+            return null;
+        }
+        
+        return shader;
+    }
+    
+    // プログラム作成
+    createProgram(gl, vertexShader, fragmentShader) {
+        const program = gl.createProgram();
+        gl.attachShader(program, vertexShader);
+        gl.attachShader(program, fragmentShader);
+        gl.linkProgram(program);
+        
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+            console.error('Program linking error:', gl.getProgramInfoLog(program));
+            gl.deleteProgram(program);
+            return null;
+        }
+        
+        return program;
+    }
+    
+    // 風揺れメッシュを作成（バウンディングボックス付き）
+    createWindShakeMeshWithBounds(ws, width, height, t) {
+        let N = Math.floor(ws.divisions);
+        if (N < 1) N = 1;
+        if (N > 50) N = 50;
+        
+        const M = 8; // 横分割数
+        
+        const F = Math.PI * ws.angle / 180;
+        const dt = ws.period;
+        const c = 2 * Math.PI / dt;
+        const d = 2 * ws.phaseShift * Math.PI / 180;
+        const CNT = ws.center * Math.PI / 180;
+        
+        let dL = ws.topFixed * 0.01 * height;
+        let dL2 = ws.bottomFixed * 0.01 * height;
+        
+        if (ws.fromBottom) {
+            [dL, dL2] = [dL2, dL];
+        }
+        
+        if (dL < 0) dL = 0;
+        if (dL > height) dL = height;
+        if (dL2 < 0) dL2 = 0;
+        if (dL2 > height - dL) dL2 = height - dL;
+        
+        const L = height - dL - dL2;
+        
+        // ランダム揺れ
+        let currentF = F;
+        if (ws.randomSwing) {
+            const s = t / ws.period;
+            const n1 = Math.floor(s);
+            const frac = s - n1;
+            
+            const f0 = this.getRandomValue(n1 - 1, ws.seed, ws.randomPattern) * F;
+            const f1 = this.getRandomValue(n1, ws.seed, ws.randomPattern) * F;
+            const f2 = this.getRandomValue(n1 + 1, ws.seed, ws.randomPattern) * F;
+            const f3 = this.getRandomValue(n1 + 2, ws.seed, ws.randomPattern) * F;
+            
+            currentF = this.cubicInterpolation(frac, f0, f1, f2, f3);
+        }
+        
+        // 中心線を計算
+        const centerX = [];
+        const centerY = [];
+        
+        centerX[0] = 0;
+        centerY[0] = 0;
+        
+        for (let i = 1; i <= N; i++) {
+            const ratio = i / N;
+            
+            // 軸モードが有効な場合、軸より上の部分の揺れを減衰
+            let axisMultiplier = 1.0;
+            if (ws.axisMode) {
+                const axisPos = ws.axisPosition / 100; // 0-1に正規化
+                
+                // 軸より上の部分のみ処理
+                if (ratio < axisPos) {
+                    const distanceFromAxis = axisPos - ratio; // 軸からの距離(上方向)
+                    const range = ws.axisRange / 100; // 影響範囲 0-1
+                    
+                    // 影響範囲内の場合のみ減衰
+                    if (distanceFromAxis < range) {
+                        const normalizedDist = distanceFromAxis / range; // 0-1に正規化
+                        // スムーズな減衰カーブ (軸に近いほど減衰が強い)
+                        const decayFactor = Math.pow(1 - normalizedDist, 2);
+                        // 揺れ強度を適用 (0-100 → 0-1の範囲)
+                        // axisStrength=0: 完全に揺れない、axisStrength=100: 通常通り揺れる
+                        axisMultiplier = (ws.axisStrength / 100) + decayFactor * (1.0 - ws.axisStrength / 100);
+                    }
+                }
+                // 軸より下の部分(ratio >= axisPos)はaxisMultiplier = 1.0のまま
+            }
+            
+            const Si = (currentF * Math.sin(c * t - i * d / N) + CNT) * (1 - Math.pow(1 - ratio, 4)) * axisMultiplier;
+            
+            centerX[i] = centerX[i - 1] + Math.sin(Si) * (L / N);
+            centerY[i] = dL + L * ratio;
+        }
+        
+        // 2Dメッシュグリッド生成とバウンディングボックス計算
+        const worldPositions = []; // ピクセル座標
+        const texCoords = [];
+        const indices = [];
+        
+        let minX = Infinity, maxX = -Infinity;
+        let minY = Infinity, maxY = -Infinity;
+        
+        for (let i = 0; i <= N; i++) {
+            for (let j = 0; j <= M; j++) {
+                const xRatio = j / M;
+                const yRatio = i / N;
+                
+                // ワールド座標（ピクセル座標）
+                const x = centerX[i] + (xRatio - 0.5) * width;
+                const y = centerY[i];
+                
+                // バウンディングボックス更新
+                minX = Math.min(minX, x);
+                maxX = Math.max(maxX, x);
+                minY = Math.min(minY, y);
+                maxY = Math.max(maxY, y);
+                
+                worldPositions.push(x, y);
+                texCoords.push(xRatio, yRatio);
+            }
+        }
+        
+        // インデックス生成（三角形）
+        for (let i = 0; i < N; i++) {
+            for (let j = 0; j < M; j++) {
+                const topLeft = i * (M + 1) + j;
+                const topRight = topLeft + 1;
+                const bottomLeft = (i + 1) * (M + 1) + j;
+                const bottomRight = bottomLeft + 1;
+                
+                // 三角形1
+                indices.push(topLeft, bottomLeft, topRight);
+                // 三角形2
+                indices.push(topRight, bottomLeft, bottomRight);
+            }
+        }
+        
+        // バウンディングボックス情報
+        const bounds = {
+            minX: minX,
+            maxX: maxX,
+            minY: minY,
+            maxY: maxY,
+            width: maxX - minX,
+            height: maxY - minY,
+            centerX: (maxX + minX) / 2,
+            centerY: (maxY + minY) / 2
+        };
+        
+        return { 
+            mesh: { worldPositions, texCoords, indices },
+            bounds: bounds
+        };
+    }
+    
+    // WebGLでメッシュを描画
+    renderWindShakeWebGL(gl, img, mesh, canvasWidth, canvasHeight) {
+        const program = this.windShakeProgram;
+        const programInfo = this.windShakeProgramInfo;
+        
+        gl.clearColor(0, 0, 0, 0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        
+        gl.useProgram(program);
+        
+        // ワールド座標をWebGL座標に変換
+        const glPositions = [];
+        for (let i = 0; i < mesh.worldPositions.length; i += 2) {
+            const x = mesh.worldPositions[i];
+            const y = mesh.worldPositions[i + 1];
+            
+            // キャンバス中心を原点として、WebGL座標系に変換
+            const glX = (x / canvasWidth) * 2;
+            const glY = -(y / canvasHeight) * 2 + 1;
+            
+            glPositions.push(glX, glY);
+        }
+        
+        // 位置バッファ
+        const positionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(glPositions), gl.STATIC_DRAW);
+        gl.enableVertexAttribArray(programInfo.attribLocations.position);
+        gl.vertexAttribPointer(programInfo.attribLocations.position, 2, gl.FLOAT, false, 0, 0);
+        
+        // テクスチャ座標バッファ
+        const texCoordBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(mesh.texCoords), gl.STATIC_DRAW);
+        gl.enableVertexAttribArray(programInfo.attribLocations.texCoord);
+        gl.vertexAttribPointer(programInfo.attribLocations.texCoord, 2, gl.FLOAT, false, 0, 0);
+        
+        // インデックスバッファ
+        const indexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(mesh.indices), gl.STATIC_DRAW);
+        
+        // テクスチャ作成
+        const texture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+        
+        // 描画
+        gl.uniform1i(programInfo.uniformLocations.image, 0);
+        gl.drawElements(gl.TRIANGLES, mesh.indices.length, gl.UNSIGNED_SHORT, 0);
+        
+        // クリーンアップ
+        gl.deleteBuffer(positionBuffer);
+        gl.deleteBuffer(texCoordBuffer);
+        gl.deleteBuffer(indexBuffer);
+        gl.deleteTexture(texture);
+    }
+    
+    // 以下、既存の関数は削除または簡略化
+    applyWindShakeToImage(ctx, img, width, height, clip, localTime) {
+        // 互換性のため残すが、WebGL版を呼ぶ
+        this.applyWindShakeWebGL(ctx, img, width, height, clip, localTime);
+    }
+    
+    // 風揺れメッシュのレンダリング（2Dグリッド方式）
+    renderWindShakeMesh(ctx, img, w, h, N, F, c, d, CNT, dL, dL2, L, t, ws, offsetX) {
+        const w2 = w / 2;
+        const h2 = h / 2;
+        
+        // ランダム揺れの場合、振幅を調整
+        let currentF = F;
+        if (ws.randomSwing) {
+            const s = t / ws.period;
+            const n1 = Math.floor(s);
+            const frac = s - n1;
+            
+            const f0 = this.getRandomValue(n1 - 1, ws.seed, ws.randomPattern) * F;
+            const f1 = this.getRandomValue(n1, ws.seed, ws.randomPattern) * F;
+            const f2 = this.getRandomValue(n1 + 1, ws.seed, ws.randomPattern) * F;
+            const f3 = this.getRandomValue(n1 + 2, ws.seed, ws.randomPattern) * F;
+            
+            currentF = this.cubicInterpolation(frac, f0, f1, f2, f3);
+        }
+        
+        // 横方向の分割数（固定）
+        const M = 4; // 横4分割
+        
+        // 2Dグリッドのメッシュポイントを計算
+        const gridX = [];
+        const gridY = [];
+        const gridU = [];
+        const gridV = [];
+        
+        // 中心線の座標を計算（縦方向）
+        const centerX = [];
+        const centerY = [];
+        
+        centerX[0] = 0;
+        centerY[0] = -h2;
+        
+        for (let i = 1; i <= N; i++) {
+            const ratio = i / N;
+            const yPos = -h2 + (dL + L * ratio);
+            
+            // 揺れの計算（縦位置に応じて変化）
+            const Si = (currentF * Math.sin(c * t - i * d / N) + CNT) * (1 - Math.pow(1 - ratio, 4));
+            
+            centerX[i] = centerX[i - 1] + Math.sin(Si) * (L / N);
+            centerY[i] = yPos;
+        }
+        
+        // 2Dグリッドを生成
+        for (let i = 0; i <= N; i++) {
+            gridX[i] = [];
+            gridY[i] = [];
+            gridU[i] = [];
+            gridV[i] = [];
+            
+            const baseX = centerX[i];
+            const baseY = centerY[i];
+            
+            // 横方向に展開
+            for (let j = 0; j <= M; j++) {
+                const xRatio = (j / M) - 0.5; // -0.5 to 0.5
+                
+                gridX[i][j] = baseX + xRatio * w;
+                gridY[i][j] = baseY;
+                gridU[i][j] = (j / M) * w;
+                gridV[i][j] = (i / N) * h;
+            }
+        }
+        
+        // バウンディングボックスを計算してオフセット調整
+        let minX = Infinity, maxX = -Infinity;
+        let minY = Infinity, maxY = -Infinity;
+        
+        for (let i = 0; i <= N; i++) {
+            for (let j = 0; j <= M; j++) {
+                minX = Math.min(minX, gridX[i][j]);
+                maxX = Math.max(maxX, gridX[i][j]);
+                minY = Math.min(minY, gridY[i][j]);
+                maxY = Math.max(maxY, gridY[i][j]);
+            }
+        }
+        
+        const CX = (maxX + minX) * 0.5;
+        const CY = (maxY + minY) * 0.5;
+        
+        // 中心を原点に調整
+        for (let i = 0; i <= N; i++) {
+            for (let j = 0; j <= M; j++) {
+                gridX[i][j] -= CX;
+                gridY[i][j] -= CY;
+            }
+        }
+        
+        // メッシュを描画
+        ctx.save();
+        ctx.translate(offsetX, 0);
+        
+        if (ws.fromBottom) {
+            ctx.scale(1, -1);
+        }
+        
+        // 各グリッドセルを描画
+        for (let i = 0; i < N; i++) {
+            for (let j = 0; j < M; j++) {
+                // 四角形の4つの頂点
+                const x0 = gridX[i][j];
+                const y0 = gridY[i][j];
+                const u0 = gridU[i][j];
+                const v0 = gridV[i][j];
+                
+                const x1 = gridX[i][j + 1];
+                const y1 = gridY[i][j + 1];
+                const u1 = gridU[i][j + 1];
+                const v1 = gridV[i][j + 1];
+                
+                const x2 = gridX[i + 1][j + 1];
+                const y2 = gridY[i + 1][j + 1];
+                const u2 = gridU[i + 1][j + 1];
+                const v2 = gridV[i + 1][j + 1];
+                
+                const x3 = gridX[i + 1][j];
+                const y3 = gridY[i + 1][j];
+                const u3 = gridU[i + 1][j];
+                const v3 = gridV[i + 1][j];
+                
+                // 四角形を2つの三角形として描画
+                this.drawTexturedTriangle(ctx, img, w, h, x0, y0, u0, v0, x1, y1, u1, v1, x3, y3, u3, v3);
+                this.drawTexturedTriangle(ctx, img, w, h, x1, y1, u1, v1, x2, y2, u2, v2, x3, y3, u3, v3);
+            }
+        }
+        
+        ctx.restore();
+    }
+    
+    // テクスチャ付き四角形の描画（改善版：バイリニア補間を使用）
+    drawTexturedQuad(ctx, img, imgWidth, imgHeight, x0, y0, u0, v0, x1, y1, u1, v1, x2, y2, u2, v2, x3, y3, u3, v3) {
+        // 四角形を2つの三角形に分割して描画（より正確）
+        this.drawTexturedTriangle(ctx, img, imgWidth, imgHeight, x0, y0, u0, v0, x1, y1, u1, v1, x3, y3, u3, v3);
+        this.drawTexturedTriangle(ctx, img, imgWidth, imgHeight, x1, y1, u1, v1, x2, y2, u2, v2, x3, y3, u3, v3);
+    }
+    
+    // テクスチャ付き三角形の描画（改善版）
+    drawTexturedTriangle(ctx, img, imgWidth, imgHeight, x0, y0, u0, v0, x1, y1, u1, v1, x2, y2, u2, v2) {
+        // 画像を一時キャンバスに描画してから変形
+        ctx.save();
+        
+        // クリッピング領域を設定
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        ctx.lineTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.closePath();
+        ctx.clip();
+        
+        // アンチエイリアスを有効化
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        
+        // 3点アフィン変換
+        const du1 = u1 - u0;
+        const dv1 = v1 - v0;
+        const du2 = u2 - u0;
+        const dv2 = v2 - v0;
+        const dx1 = x1 - x0;
+        const dy1 = y1 - y0;
+        const dx2 = x2 - x0;
+        const dy2 = y2 - y0;
+        
+        const det = du1 * dv2 - du2 * dv1;
+        if (Math.abs(det) < 0.001) {
+            ctx.restore();
+            return;
+        }
+        
+        const a = (dx1 * dv2 - dx2 * dv1) / det;
+        const b = (dx2 * du1 - dx1 * du2) / det;
+        const c = (dy1 * dv2 - dy2 * dv1) / det;
+        const d = (dy2 * du1 - dy1 * du2) / det;
+        const e = x0 - (a * u0 + b * v0);
+        const f = y0 - (c * u0 + d * v0);
+        
+        ctx.transform(a, c, b, d, e, f);
+        ctx.drawImage(img, 0, 0, imgWidth, imgHeight);
+        
+        ctx.restore();
+    }
+    
+    // ランダム値の生成（再現性のある疑似乱数）
+    getRandomValue(n, baseSeed, pattern) {
+        const seed = Math.abs(10 + pattern) + n;
+        // 簡易的なハッシュ関数
+        const x = Math.sin(seed * baseSeed) * 10000;
+        return (x - Math.floor(x));
+    }
+    
+    // キュービック補間
+    cubicInterpolation(t, p0, p1, p2, p3) {
+        const t2 = t * t;
+        const t3 = t2 * t;
+        
+        const a0 = p3 - p2 - p0 + p1;
+        const a1 = p0 - p1 - a0;
+        const a2 = p2 - p0;
+        const a3 = p1;
+        
+        return a0 * t3 + a1 * t2 + a2 * t + a3;
+    }
+    
+    // 風揺れプリセットを適用
+    applyWindShakePreset(presetName) {
+        if (!this.selectedClip || !this.selectedClip.windShake) return;
+        
+        const presets = {
+            gentle_breeze: {
+                divisions: 10,
+                angle: 15,
+                period: 3.0,
+                phaseShift: 90,
+                center: 0,
+                topFixed: 10,
+                bottomFixed: 10,
+                fromBottom: false,
+                randomSwing: false,
+                randomPattern: 0,
+                timeShift: 0.1,
+                horizontalRepeat: false,
+                repeatCount: 3,
+                spacing: 50,
+                alphaCorrection: true,
+                antiAliasing: true
+            },
+            moderate_wind: {
+                divisions: 15,
+                angle: 30,
+                period: 2.0,
+                phaseShift: 90,
+                center: 0,
+                topFixed: 10,
+                bottomFixed: 10,
+                fromBottom: false,
+                randomSwing: true,
+                randomPattern: 5,
+                timeShift: 0.1,
+                horizontalRepeat: false,
+                repeatCount: 3,
+                spacing: 50,
+                alphaCorrection: true,
+                antiAliasing: true
+            },
+            strong_wind: {
+                divisions: 20,
+                angle: 60,
+                period: 1.5,
+                phaseShift: 120,
+                center: 15,
+                topFixed: 15,
+                bottomFixed: 5,
+                fromBottom: false,
+                randomSwing: true,
+                randomPattern: 10,
+                timeShift: 0.05,
+                horizontalRepeat: false,
+                repeatCount: 3,
+                spacing: 50,
+                alphaCorrection: true,
+                antiAliasing: true
+            },
+            flag: {
+                divisions: 25,
+                angle: 45,
+                period: 1.2,
+                phaseShift: 180,
+                center: 0,
+                topFixed: 0,
+                bottomFixed: 0,
+                fromBottom: false,
+                randomSwing: true,
+                randomPattern: 15,
+                timeShift: 0.08,
+                horizontalRepeat: false,
+                repeatCount: 3,
+                spacing: 50,
+                alphaCorrection: true,
+                antiAliasing: true
+            },
+            curtain: {
+                divisions: 30,
+                angle: 25,
+                period: 2.5,
+                phaseShift: 90,
+                center: 0,
+                topFixed: 5,
+                bottomFixed: 15,
+                fromBottom: false,
+                randomSwing: false,
+                randomPattern: 0,
+                timeShift: 0.15,
+                horizontalRepeat: false,
+                repeatCount: 3,
+                spacing: 50,
+                alphaCorrection: true,
+                antiAliasing: true
+            },
+            underwater: {
+                divisions: 20,
+                angle: 20,
+                period: 4.0,
+                phaseShift: 60,
+                center: 5,
+                topFixed: 10,
+                bottomFixed: 10,
+                fromBottom: false,
+                randomSwing: true,
+                randomPattern: 8,
+                timeShift: 0.2,
+                horizontalRepeat: false,
+                repeatCount: 3,
+                spacing: 50,
+                alphaCorrection: true,
+                antiAliasing: true
+            }
+        };
+        
+        if (presets[presetName]) {
+            Object.assign(this.selectedClip.windShake, presets[presetName]);
+            this.updateWindShakeUI();
+            this.updatePreview();
+        }
     }
 }
 

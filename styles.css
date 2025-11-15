@@ -187,6 +187,28 @@ body {
     width: 300px;
     border-right: none;
     border-left: 2px solid var(--chocolate-main);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+/* 右サイドバーのスクロールバーカスタマイズ */
+.right-sidebar::-webkit-scrollbar {
+    width: 10px;
+}
+
+.right-sidebar::-webkit-scrollbar-track {
+    background: var(--chocolate-dark);
+}
+
+.right-sidebar::-webkit-scrollbar-thumb {
+    background: var(--accent-orange);
+    border-radius: 5px;
+}
+
+.right-sidebar::-webkit-scrollbar-thumb:hover {
+    background: var(--cocoa-color);
 }
 
 .sidebar-header {
@@ -622,8 +644,6 @@ body {
 }
 
 .properties-content {
-    flex: 1;
-    overflow-y: auto;
     padding: 10px;
 }
 
@@ -776,15 +796,21 @@ body {
 
 /* エフェクトパネル */
 .effects-panel {
-    flex: 1;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
 }
 
 .effects-content {
-    flex: 1;
-    overflow-y: auto;
+    padding: 10px;
+}
+
+/* クリッププロパティパネル用 */
+.clip-properties-panel {
+    display: flex;
+    flex-direction: column;
+}
+
+.clip-properties-content {
     padding: 10px;
 }
 

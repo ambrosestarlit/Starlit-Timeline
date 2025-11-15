@@ -148,6 +148,9 @@
                             <input type="checkbox" id="loopPlaybackCheckbox">
                             <span>ループ再生</span>
                         </label>
+                        <button class="small-button" onclick="app.setInPoint()" title="インポイント設定 (I)">📍 In</button>
+                        <button class="small-button" onclick="app.setOutPoint()" title="アウトポイント設定 (O)">📍 Out</button>
+                        <button class="small-button" onclick="app.clearInOutPoints()" title="範囲クリア">❌</button>
                         <div class="control-separator"></div>
                         <button class="icon-button" onclick="app.undo()" title="元に戻す (Ctrl+Z)">
                             <img src="undo.png" alt="元に戻す" class="button-icon">
@@ -360,6 +363,214 @@
                         </div>
                     </div>
                 </div>
+                
+                <!-- クリッププロパティパネル -->
+                <div class="clip-properties-panel" id="clipPropertiesPanel" style="display: none;">
+                    <div class="sidebar-header">
+                        <h3>🎨 クリップエフェクト</h3>
+                        <div class="header-controls">
+                            <button class="round-button small" onclick="app.saveClipEffectSettings()" title="クリップエフェクト設定を保存">💾</button>
+                            <button class="round-button small" onclick="app.loadClipEffectSettings()" title="クリップエフェクト設定を読込">📂</button>
+                        </div>
+                    </div>
+                    <div class="clip-properties-content">
+                        <!-- 風揺れエフェクト -->
+                        <div class="effect-item">
+                            <div class="effect-header" onclick="app.toggleClipEffect('windShake')">
+                                <span>🍃 風揺れエフェクト</span>
+                                <input type="checkbox" id="windShakeEnabled">
+                            </div>
+                            <div class="effect-controls" id="windShakeControls" style="display: none;">
+                                <!-- 基本設定 -->
+                                <div class="effect-section">
+                                    <div class="effect-section-title">⚙️ 基本設定</div>
+                                    
+                                    <label>分割数: <span id="windShakeDivisionsValue">10</span></label>
+                                    <input type="range" min="1" max="50" value="10" step="1" class="effect-slider" id="windShakeDivisions">
+                                    
+                                    <label>揺れ角 (度): <span id="windShakeAngleValue">30</span></label>
+                                    <input type="range" min="0" max="360" value="30" step="1" class="effect-slider" id="windShakeAngle">
+                                    
+                                    <label>揺れ周期 (秒): <span id="windShakePeriodValue">2.0</span></label>
+                                    <input type="range" min="0.01" max="10" value="2.0" step="0.01" class="effect-slider" id="windShakePeriod">
+                                    
+                                    <div style="background: rgba(210, 105, 30, 0.2); padding: 8px; margin-top: 8px; border-radius: 4px; font-size: 11px;">
+                                        💡 <strong>ループアニメのヒント:</strong><br>
+                                        クリップの長さを揺れ周期の倍数にすると完全ループします<br>
+                                        <span id="windShakeLoopInfo" style="color: #FFD700;">周期 2.0秒 → 2秒, 4秒, 6秒でループ</span>
+                                    </div>
+                                    
+                                    <label>揺れズレ (度): <span id="windShakePhaseShiftValue">90</span></label>
+                                    <input type="range" min="-360" max="360" value="90" step="1" class="effect-slider" id="windShakePhaseShift">
+                                    
+                                    <label>センター (度): <span id="windShakeCenterValue">0</span></label>
+                                    <input type="range" min="-180" max="180" value="0" step="1" class="effect-slider" id="windShakeCenter">
+                                </div>
+                                
+                                <!-- 固定領域設定 -->
+                                <div class="effect-section">
+                                    <div class="effect-section-title">📐 固定領域</div>
+                                    
+                                    <label>上固定長 (%): <span id="windShakeTopFixedValue">10</span></label>
+                                    <input type="range" min="0" max="100" value="10" step="1" class="effect-slider" id="windShakeTopFixed">
+                                    
+                                    <label>下固定長 (%): <span id="windShakeBottomFixedValue">10</span></label>
+                                    <input type="range" min="0" max="100" value="10" step="1" class="effect-slider" id="windShakeBottomFixed">
+                                    
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="windShakeFromBottom">
+                                        <span>下を基準にする</span>
+                                    </label>
+                                </div>
+                                
+                                <!-- 軸揺れ強度設定 -->
+                                <div class="effect-section">
+                                    <div class="effect-section-title">🎯 軸揺れ強度</div>
+                                    
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="windShakeAxisMode">
+                                        <span>軸モードを有効化</span>
+                                    </label>
+                                    
+                                    <button class="small-button" id="windShakePickAxisBtn" style="width: 100%; margin: 10px 0;" disabled>
+                                        🎯 キャンバスをクリックして軸を選択
+                                    </button>
+                                    
+                                    <label>軸位置 (%): <span id="windShakeAxisPositionValue">50</span></label>
+                                    <input type="range" min="0" max="100" value="50" step="1" class="effect-slider" id="windShakeAxisPosition" disabled>
+                                    
+                                    <label>揺れ強度 (0-100): <span id="windShakeAxisStrengthValue">50</span></label>
+                                    <input type="range" min="0" max="100" value="50" step="1" class="effect-slider" id="windShakeAxisStrength" disabled>
+                                    
+                                    <label>影響範囲 (%): <span id="windShakeAxisRangeValue">30</span></label>
+                                    <input type="range" min="1" max="100" value="30" step="1" class="effect-slider" id="windShakeAxisRange" disabled>
+                                </div>
+                                
+                                <!-- ランダム設定 -->
+                                <div class="effect-section">
+                                    <div class="effect-section-title">🎲 ランダム設定</div>
+                                    
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="windShakeRandomSwing">
+                                        <span>ランダム揺れを使用</span>
+                                    </label>
+                                    
+                                    <label>ランダムパターン: <span id="windShakeRandomPatternValue">0</span></label>
+                                    <input type="range" min="0" max="100" value="0" step="1" class="effect-slider" id="windShakeRandomPattern">
+                                </div>
+                                
+                                <!-- 横繰り返し設定 -->
+                                <div class="effect-section">
+                                    <div class="effect-section-title">↔️ 横繰り返し</div>
+                                    
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="windShakeHorizontalRepeat">
+                                        <span>横に繰り返す</span>
+                                    </label>
+                                    
+                                    <label>繰り返し個数: <span id="windShakeRepeatCountValue">3</span></label>
+                                    <input type="range" min="1" max="10" value="3" step="1" class="effect-slider" id="windShakeRepeatCount">
+                                    
+                                    <label>間隔 (px): <span id="windShakeSpacingValue">50</span></label>
+                                    <input type="range" min="-500" max="500" value="50" step="10" class="effect-slider" id="windShakeSpacing">
+                                    
+                                    <label>時間ずれ: <span id="windShakeTimeShiftValue">0.1</span></label>
+                                    <input type="range" min="0" max="2" value="0.1" step="0.01" class="effect-slider" id="windShakeTimeShift">
+                                </div>
+                                
+                                <!-- 高度な設定 -->
+                                <div class="effect-section">
+                                    <div class="effect-section-title">🔧 高度な設定</div>
+                                    
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="windShakeAlphaCorrection" checked>
+                                        <span>アルファ補正</span>
+                                    </label>
+                                    
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="windShakeAntiAliasing" checked>
+                                        <span>破綻軽減 (アンチエイリアシング)</span>
+                                    </label>
+                                </div>
+                                
+                                <!-- プリセット -->
+                                <div class="effect-section">
+                                    <div class="effect-section-title">📋 プリセット</div>
+                                    <select id="windShakePreset" class="effect-slider" style="width: 100%; padding: 8px;">
+                                        <option value="">カスタム</option>
+                                        <option value="gentle_breeze">そよ風</option>
+                                        <option value="moderate_wind">普通の風</option>
+                                        <option value="strong_wind">強風</option>
+                                        <option value="flag">旗のはためき</option>
+                                        <option value="curtain">カーテンの揺れ</option>
+                                        <option value="underwater">水中の揺らぎ</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- ガウシアンブラー -->
+                        <div class="effect-item">
+                            <div class="effect-header" onclick="app.toggleClipEffect('gaussianBlur')">
+                                <span>🌫️ ガウシアンブラー</span>
+                                <input type="checkbox" id="gaussianBlurEnabled">
+                            </div>
+                            <div class="effect-controls" id="gaussianBlurControls" style="display: none;">
+                                <div class="effect-section">
+                                    <div class="effect-section-title">🎛️ ブラー設定</div>
+                                    
+                                    <label>ブラー強度: <span id="gaussianBlurStrengthValue">10</span></label>
+                                    <input type="range" min="0" max="100" value="10" step="0.5" class="effect-slider" id="gaussianBlurStrength">
+                                    
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="gaussianBlurHorizontalOnly">
+                                        <span>横方向のみ</span>
+                                    </label>
+                                    
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="gaussianBlurVerticalOnly">
+                                        <span>縦方向のみ</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- レンズブラー -->
+                        <div class="effect-item">
+                            <div class="effect-header" onclick="app.toggleClipEffect('lensBlur')">
+                                <span>📷 レンズブラー (被写界深度)</span>
+                                <input type="checkbox" id="lensBlurEnabled">
+                            </div>
+                            <div class="effect-controls" id="lensBlurControls" style="display: none;">
+                                <div class="effect-section">
+                                    <div class="effect-section-title">🎯 フォーカス設定</div>
+                                    
+                                    <div style="background: rgba(210, 105, 30, 0.2); padding: 8px; margin-bottom: 10px; border-radius: 4px; font-size: 11px;">
+                                        💡 アニメ背景用の円形ボケ効果（六角形絞り風）
+                                    </div>
+                                    
+                                    <button class="small-button" id="lensBlurPickFocusBtn" style="width: 100%; margin: 10px 0;">
+                                        🎯 キャンバスをクリックしてフォーカス位置を選択
+                                    </button>
+                                    
+                                    <label>フォーカス位置 (Y%): <span id="lensBlurFocusPositionValue">50</span></label>
+                                    <input type="range" min="0" max="100" value="50" step="1" class="effect-slider" id="lensBlurFocusPosition">
+                                    
+                                    <label>フォーカス範囲: <span id="lensBlurFocusRangeValue">20</span></label>
+                                    <input type="range" min="1" max="100" value="20" step="1" class="effect-slider" id="lensBlurFocusRange">
+                                    
+                                    <label>最大ブラー強度: <span id="lensBlurStrengthValue">30</span></label>
+                                    <input type="range" min="0" max="100" value="30" step="0.5" class="effect-slider" id="lensBlurStrength">
+                                    
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="lensBlurInvert">
+                                        <span>反転（フォーカス位置をぼかす）</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -368,6 +579,7 @@
     <input type="file" id="fileInput" multiple accept="image/*,video/*,audio/*" style="display: none;" onchange="app.handleFileSelect(event)">
     <input type="file" id="projectInput" accept=".json" style="display: none;" onchange="app.handleProjectLoad(event)">
     <input type="file" id="effectSettingsInput" accept=".json" style="display: none;" onchange="app.handleEffectSettingsLoad(event)">
+    <input type="file" id="clipEffectSettingsInput" accept=".json" style="display: none;" onchange="app.handleClipEffectSettingsLoad(event)">
     <input type="file" id="assetsZipInput" accept=".zip" style="display: none;" onchange="app.handleAssetsZipLoad(event)">
 
     <!-- JSZip ライブラリ -->
