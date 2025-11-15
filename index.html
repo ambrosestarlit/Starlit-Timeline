@@ -5,9 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Starlit Timeline Editor Web</title>
     <link rel="stylesheet" href="styles.css">
-    <!-- FFmpeg.wasm for MP4 export - jsdelivr CDN (CORS対応) -->
-    <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/umd/index.js"></script>
 </head>
 <body>
     <div id="app">
@@ -35,7 +32,6 @@
             <div class="menu-item">
                 <span>書き出し</span>
                 <div class="submenu">
-                    <div class="submenu-item" onclick="app.exportVideo()">動画書き出し (MP4)</div>
                     <div class="submenu-item" onclick="app.exportWebM()">動画書き出し (WebM・透過対応)</div>
                     <div class="submenu-item" onclick="app.exportSequence()">連番PNG書き出し</div>
                     <div class="submenu-item" onclick="app.exportAudio()">音声のみ書き出し</div>

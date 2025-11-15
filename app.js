@@ -222,7 +222,7 @@ class StarlitTimelineApp {
             // 通常の場合はファイル選択
             input.removeAttribute('webkitdirectory');
             input.removeAttribute('directory');
-            input.accept = 'image/*,video/*,audio/*';
+            input.accept = 'image/*,video/*,audio/*,.mov,.MOV';
         }
         
         input.multiple = true;
@@ -276,10 +276,21 @@ class StarlitTimelineApp {
     }
     
     addAsset(file) {
+        // MOVファイルの判定（MIMEタイプが空の場合もあるので拡張子で判定）
+        const fileName = file.name.toLowerCase();
+        const isMOV = fileName.endsWith('.mov');
+        
+        let assetType = file.type.split('/')[0]; // image, video, audio
+        
+        // MOVファイルは動画として扱う
+        if (isMOV || file.type === 'video/quicktime') {
+            assetType = 'video';
+        }
+        
         const asset = {
             id: Date.now() + Math.random(),
             name: file.name,
-            type: file.type.split('/')[0], // image, video, audio
+            type: assetType,
             file: file,
             url: URL.createObjectURL(file)
         };
@@ -2895,18 +2906,15 @@ class StarlitTimelineApp {
         // 書き出しダイアログを表示
         const choice = prompt(
             '書き出し形式を選択してください:\n\n' +
-            '1: MP4動画 (FFmpeg使用・高互換性)\n' +
-            '2: WebM動画 (透過対応・高速)\n' +
-            '3: 連番PNG\n' +
-            '4: キャンセル',
+            '1: WebM動画 (透過対応・高速)\n' +
+            '2: 連番PNG (高品質・MP4変換用)\n' +
+            '3: キャンセル',
             '1'
         );
         
         if (choice === '1') {
-            this.exportVideo();
-        } else if (choice === '2') {
             this.exportWebM();
-        } else if (choice === '3') {
+        } else if (choice === '2') {
             this.exportSequence();
         }
     }
