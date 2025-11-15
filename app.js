@@ -773,20 +773,23 @@ class StarlitTimelineApp {
     
     // 音声クリップの準備
     prepareAudioClip(clip) {
+        // 既に準備済みの場合は何もしない
+        if (clip.audioElement && clip.audioSource) {
+            return;
+        }
+        
         clip.audioElement = new Audio(clip.asset.url);
         clip.audioElement.preload = 'auto';
         
         // Web Audio APIのノードを作成
-        if (!clip.audioSource) {
-            clip.audioSource = this.audioContext.createMediaElementSource(clip.audioElement);
-            clip.gainNode = this.audioContext.createGain();
-            clip.panNode = this.audioContext.createStereoPanner();
-            
-            // ノードを接続: audioSource → panNode → gainNode → destination
-            clip.audioSource.connect(clip.panNode);
-            clip.panNode.connect(clip.gainNode);
-            clip.gainNode.connect(this.audioContext.destination);
-        }
+        clip.audioSource = this.audioContext.createMediaElementSource(clip.audioElement);
+        clip.gainNode = this.audioContext.createGain();
+        clip.panNode = this.audioContext.createStereoPanner();
+        
+        // ノードを接続: audioSource → panNode → gainNode → destination
+        clip.audioSource.connect(clip.panNode);
+        clip.panNode.connect(clip.gainNode);
+        clip.gainNode.connect(this.audioContext.destination);
     }
     
     // タイムライン描画
@@ -1734,6 +1737,11 @@ class StarlitTimelineApp {
             this.selectedClip[property] = value;
         }
         
+        // 音量を変更した場合、gainNodeに反映
+        if (property === 'volume' && this.selectedClip.gainNode) {
+            this.selectedClip.gainNode.gain.value = value;
+        }
+        
         this.drawTimeline();
         this.updatePreview();
         this.saveHistory();
@@ -1773,6 +1781,11 @@ class StarlitTimelineApp {
             keyframes.sort((a, b) => a.time - b.time);
         }
         
+        // 音声パラメータ（pan）の場合、リアルタイムで適用
+        if (property === 'pan' && this.selectedClip.panNode) {
+            this.selectedClip.panNode.pan.value = value;
+        }
+        
         this.updatePreview(); // リアルタイム更新
         this.drawTimeline();
         this.updatePropertiesPanel();
@@ -1793,6 +1806,11 @@ class StarlitTimelineApp {
         } else {
             keyframes.push({ time: localTime, value: value });
             keyframes.sort((a, b) => a.time - b.time);
+        }
+        
+        // 音声パラメータ（pan）の場合、リアルタイムで適用
+        if (property === 'pan' && this.selectedClip.panNode) {
+            this.selectedClip.panNode.pan.value = value;
         }
         
         this.updatePreview(); // プレビューのみ更新
