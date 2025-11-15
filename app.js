@@ -3849,8 +3849,9 @@ class StarlitTimelineApp {
             // 位置移動
             const newX = this.initialTransform.x + dx;
             const newY = this.initialTransform.y + dy;
-            this.updateClipProperty('x', newX);
-            this.updateClipProperty('y', newY);
+            console.log('Moving to:', newX, newY);
+            this.setKeyframeValueLive('x', newX);
+            this.setKeyframeValueLive('y', newY);
             
         } else if (this.previewDragMode === 'rotate') {
             // 回転
@@ -3872,8 +3873,9 @@ class StarlitTimelineApp {
             // 角度差(度)
             const angleDelta = (currentAngle - startAngle) * 180 / Math.PI;
             const newRotation = this.initialTransform.rotation + angleDelta;
+            console.log('Rotating to:', newRotation);
             
-            this.updateClipProperty('rotation', newRotation);
+            this.setKeyframeValueLive('rotation', newRotation);
             
         } else if (this.previewDragMode.startsWith('corner-')) {
             // コーナーハンドル: 均等スケール(アスペクト比維持)
@@ -3883,8 +3885,9 @@ class StarlitTimelineApp {
             // スケール変化量を計算
             const scaleDelta = (direction * distance) / 200; // 感度調整
             const newScale = Math.max(0.1, this.initialTransform.scale + scaleDelta);
+            console.log('Scaling to:', newScale);
             
-            this.updateClipProperty('scale', newScale);
+            this.setKeyframeValueLive('scale', newScale);
             
         } else if (this.previewDragMode.startsWith('edge-')) {
             // エッジハンドル: 非均等スケール(実装は複雑なため、とりあえず均等スケールとして扱う)
@@ -3893,11 +3896,11 @@ class StarlitTimelineApp {
             
             const scaleDelta = (direction * distance) / 200;
             const newScale = Math.max(0.1, this.initialTransform.scale + scaleDelta);
+            console.log('Scaling to:', newScale);
             
-            this.updateClipProperty('scale', newScale);
+            this.setKeyframeValueLive('scale', newScale);
         }
         
-        this.updatePreview();
         this.updatePropertiesPanel();
         
         e.preventDefault();
@@ -3905,12 +3908,16 @@ class StarlitTimelineApp {
     
     handlePreviewMouseUp(e) {
         if (this.isPreviewDragging) {
+            console.log('Preview drag ended');
             this.isPreviewDragging = false;
             this.previewDragStart = null;
             this.previewDragMode = null;
             this.initialTransform = null;
             this.activeHandle = null;
             this.previewCanvas.style.cursor = 'default';
+            
+            // タイムラインとプロパティパネルを更新して履歴を保存
+            this.drawTimeline();
             this.saveHistory();
         }
     }
