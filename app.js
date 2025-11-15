@@ -1564,8 +1564,8 @@ class StarlitTimelineApp {
                 // タイムアウト処理
                 setTimeout(() => resolve(), 100);
             } else {
-                // currentTimeを更新
-                if (Math.abs(clip.videoElement.currentTime - actualTime) > 0.1) {
+                // currentTimeを更新（閾値を0.05秒に緩和）
+                if (Math.abs(clip.videoElement.currentTime - actualTime) > 0.05) {
                     clip.videoElement.currentTime = actualTime;
                 }
                 
@@ -1707,33 +1707,46 @@ class StarlitTimelineApp {
         playButton.innerHTML = '<img src="pause.png" alt="一時停止" class="button-icon">';
         playButton.title = '一時停止';
         
-        const startTime = Date.now();
-        const startFrame = this.currentTime;
+        const frameInterval = 1 / this.fps; // 1フレームあたりの秒数
+        let lastFrameTime = performance.now();
+        let accumulatedTime = 0;
         
-        this.playInterval = setInterval(() => {
-            const elapsed = (Date.now() - startTime) / 1000;
-            this.currentTime = startFrame + elapsed;
+        const playbackLoop = () => {
+            if (!this.isPlaying) return;
             
-            if (this.currentTime >= this.duration) {
-                if (this.loopPlayback) {
-                    // ループ再生の場合は最初に戻る
-                    this.currentTime = 0;
-                    const newStartTime = Date.now();
-                    // startTimeとstartFrameを更新
-                    this.playInterval && clearInterval(this.playInterval);
-                    this.play();
-                    return;
-                } else {
-                    // ループしない場合は停止
-                    this.stop();
-                    return;
+            const now = performance.now();
+            const deltaTime = (now - lastFrameTime) / 1000; // 経過時間（秒）
+            lastFrameTime = now;
+            
+            accumulatedTime += deltaTime;
+            
+            // フレーム単位で進める
+            if (accumulatedTime >= frameInterval) {
+                const framesToAdvance = Math.floor(accumulatedTime / frameInterval);
+                this.currentTime += framesToAdvance * frameInterval;
+                accumulatedTime -= framesToAdvance * frameInterval;
+                
+                if (this.currentTime >= this.duration) {
+                    if (this.loopPlayback) {
+                        // ループ再生の場合は最初に戻る
+                        this.currentTime = 0;
+                        accumulatedTime = 0;
+                    } else {
+                        // ループしない場合は停止
+                        this.stop();
+                        return;
+                    }
                 }
+                
+                this.updateTimeDisplay();
+                this.updatePreview();
+                this.drawTimeline();
             }
             
-            this.updateTimeDisplay();
-            this.updatePreview();
-            this.drawTimeline();
-        }, 1000 / this.fps);
+            this.playbackAnimationFrame = requestAnimationFrame(playbackLoop);
+        };
+        
+        this.playbackAnimationFrame = requestAnimationFrame(playbackLoop);
     }
     
     pause() {
@@ -1741,8 +1754,10 @@ class StarlitTimelineApp {
         const playButton = document.getElementById('playButton');
         playButton.innerHTML = '<img src="play.png" alt="再生" class="button-icon">';
         playButton.title = '再生';
-        if (this.playInterval) {
-            clearInterval(this.playInterval);
+        
+        if (this.playbackAnimationFrame) {
+            cancelAnimationFrame(this.playbackAnimationFrame);
+            this.playbackAnimationFrame = null;
         }
     }
     
@@ -2524,12 +2539,11 @@ class StarlitTimelineApp {
         const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
         const cmdKey = isMac ? e.metaKey : e.ctrlKey;
         
+        // モード判定を保留 - mousemoveで方向から判断
         if (cmdKey) {
-            // Ctrl/Cmd押下時: 回転・スケールモード（後で判定）
-            this.previewDragMode = 'transform';
+            this.previewDragMode = 'waitingForDirection'; // 方向待ち
         } else {
-            // 通常: 位置移動モード
-            this.previewDragMode = 'position';
+            this.previewDragMode = 'position'; // 通常は位置移動
         }
         
         // 現在の値を保存
@@ -2556,29 +2570,37 @@ class StarlitTimelineApp {
         
         const localTime = this.currentTime - this.selectedClip.startTime;
         
+        // 方向待ちの場合、移動量が閾値を超えたらモードを確定
+        if (this.previewDragMode === 'waitingForDirection') {
+            const threshold = 5; // ピクセル
+            if (Math.abs(dx) > threshold || Math.abs(dy) > threshold) {
+                if (Math.abs(dx) > Math.abs(dy)) {
+                    this.previewDragMode = 'rotation'; // 左右ドラッグ: 回転
+                } else {
+                    this.previewDragMode = 'scale'; // 上下ドラッグ: スケール
+                }
+            }
+        }
+        
         if (this.previewDragMode === 'position') {
-            // 位置移動
+            // 通常ドラッグ: 位置移動
             const newX = this.initialTransform.x + dx;
             const newY = this.initialTransform.y + dy;
             
             this.updateClipProperty('x', newX);
             this.updateClipProperty('y', newY);
             
-        } else if (this.previewDragMode === 'transform') {
-            // 左右ドラッグ: 回転
-            // 上下ドラッグ: スケール
+        } else if (this.previewDragMode === 'rotation') {
+            // Ctrl/Cmd + 左右ドラッグ: 回転
+            const rotationDelta = dx * 0.5; // 感度調整
+            const newRotation = this.initialTransform.rotation + rotationDelta;
+            this.updateClipProperty('rotation', newRotation);
             
-            if (Math.abs(dx) > Math.abs(dy)) {
-                // 横方向優位: 回転
-                const rotationDelta = dx * 0.5; // 感度調整
-                const newRotation = this.initialTransform.rotation + rotationDelta;
-                this.updateClipProperty('rotation', newRotation);
-            } else {
-                // 縦方向優位: スケール
-                const scaleDelta = -dy * 0.005; // 上にドラッグで拡大
-                const newScale = Math.max(0.1, this.initialTransform.scale + scaleDelta);
-                this.updateClipProperty('scale', newScale);
-            }
+        } else if (this.previewDragMode === 'scale') {
+            // Ctrl/Cmd + 上下ドラッグ: スケール
+            const scaleDelta = -dy * 0.005; // 上にドラッグで拡大
+            const newScale = Math.max(0.1, this.initialTransform.scale + scaleDelta);
+            this.updateClipProperty('scale', newScale);
         }
         
         this.updatePreview();
