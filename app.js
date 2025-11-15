@@ -3622,12 +3622,22 @@ class StarlitTimelineApp {
         
         const rect = this.previewCanvas.getBoundingClientRect();
         
-        // CSSピクセルからキャンバスピクセルに変換
-        const scaleX = this.previewCanvas.width / rect.width;
-        const scaleY = this.previewCanvas.height / rect.height;
+        // プレビューズームを考慮した座標変換
+        const zoomFactor = this.previewZoom / 100;
         
-        const mouseX = (e.clientX - rect.left) * scaleX;
-        const mouseY = (e.clientY - rect.top) * scaleY;
+        // CSSピクセルからキャンバスピクセルに変換(ズーム考慮)
+        const scaleX = this.previewCanvas.width / (rect.width / zoomFactor);
+        const scaleY = this.previewCanvas.height / (rect.height / zoomFactor);
+        
+        // マウス座標をキャンバス中心からの相対座標に変換
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        const relativeX = (e.clientX - centerX) / zoomFactor;
+        const relativeY = (e.clientY - centerY) / zoomFactor;
+        
+        // キャンバス座標系に変換
+        const mouseX = this.previewCanvas.width / 2 + relativeX * scaleX;
+        const mouseY = this.previewCanvas.height / 2 + relativeY * scaleY;
         
         const handleSize = 10;
         const handleHitArea = 15; // クリック判定を少し広げる
@@ -3684,7 +3694,7 @@ class StarlitTimelineApp {
             }
         }
         
-        // バウンディングボックス内のクリック判定（位置移動）
+        // バウンディングボックス内のクリック判定(位置移動)
         const bbox = this.boundingBoxCache;
         const cos = Math.cos(-bbox.rotation * Math.PI / 180);
         const sin = Math.sin(-bbox.rotation * Math.PI / 180);
@@ -3714,12 +3724,22 @@ class StarlitTimelineApp {
         
         const rect = this.previewCanvas.getBoundingClientRect();
         
-        // CSSピクセルからキャンバスピクセルに変換
-        const scaleX = this.previewCanvas.width / rect.width;
-        const scaleY = this.previewCanvas.height / rect.height;
+        // プレビューズームを考慮した座標変換
+        const zoomFactor = this.previewZoom / 100;
         
-        const mouseX = (e.clientX - rect.left) * scaleX;
-        const mouseY = (e.clientY - rect.top) * scaleY;
+        // CSSピクセルからキャンバスピクセルに変換(ズーム考慮)
+        const scaleX = this.previewCanvas.width / (rect.width / zoomFactor);
+        const scaleY = this.previewCanvas.height / (rect.height / zoomFactor);
+        
+        // マウス座標をキャンバス中心からの相対座標に変換
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        const relativeX = (e.clientX - centerX) / zoomFactor;
+        const relativeY = (e.clientY - centerY) / zoomFactor;
+        
+        // キャンバス座標系に変換
+        const mouseX = this.previewCanvas.width / 2 + relativeX * scaleX;
+        const mouseY = this.previewCanvas.height / 2 + relativeY * scaleY;
         
         const dx = mouseX - this.previewDragStart.x;
         const dy = mouseY - this.previewDragStart.y;
@@ -3748,14 +3768,14 @@ class StarlitTimelineApp {
                 mouseX - centerX
             );
             
-            // 角度差（度）
+            // 角度差(度)
             const angleDelta = (currentAngle - startAngle) * 180 / Math.PI;
             const newRotation = this.initialTransform.rotation + angleDelta;
             
             this.updateClipProperty('rotation', newRotation);
             
         } else if (this.previewDragMode.startsWith('corner-')) {
-            // コーナーハンドル: 均等スケール（アスペクト比維持）
+            // コーナーハンドル: 均等スケール(アスペクト比維持)
             const distance = Math.sqrt(dx * dx + dy * dy);
             const direction = this.previewDragMode.includes('br') || this.previewDragMode.includes('tr') ? 1 : -1;
             
@@ -3766,7 +3786,7 @@ class StarlitTimelineApp {
             this.updateClipProperty('scale', newScale);
             
         } else if (this.previewDragMode.startsWith('edge-')) {
-            // エッジハンドル: 非均等スケール（実装は複雑なため、とりあえず均等スケールとして扱う）
+            // エッジハンドル: 非均等スケール(実装は複雑なため、とりあえず均等スケールとして扱う)
             const distance = Math.sqrt(dx * dx + dy * dy);
             const direction = this.previewDragMode === 'edge-r' || this.previewDragMode === 'edge-b' ? 1 : -1;
             

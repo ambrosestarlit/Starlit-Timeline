@@ -141,7 +141,7 @@ body {
     background: transparent;
     border: none;
     cursor: pointer;
-    padding: 4px;
+    padding: 6px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -159,8 +159,8 @@ body {
 }
 
 .button-icon {
-    width: 32px;
-    height: 32px;
+    width: 48px;
+    height: 48px;
     display: block;
 }
 
