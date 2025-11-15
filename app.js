@@ -1244,6 +1244,15 @@ class StarlitTimelineApp {
             this.currentTime < clip.startTime + clip.duration
         ).sort((a, b) => a.track - b.track);
         
+        // 範囲外の音声クリップを停止
+        this.clips.forEach(clip => {
+            if (clip.audioElement && !activeClips.includes(clip)) {
+                if (!clip.audioElement.paused) {
+                    clip.audioElement.pause();
+                }
+            }
+        });
+        
         activeClips.forEach(clip => {
             this.renderClip(clip);
         });
@@ -1455,6 +1464,14 @@ class StarlitTimelineApp {
         
         // trimStartを考慮した実際の再生位置を計算
         const actualTime = localTime + (clip.trimStart || 0);
+        
+        // クリップのdurationを超えている場合は停止
+        if (localTime >= clip.duration || localTime < 0) {
+            if (!clip.audioElement.paused) {
+                clip.audioElement.pause();
+            }
+            return;
+        }
         
         if (this.isPlaying) {
             if (clip.audioElement.paused) {
