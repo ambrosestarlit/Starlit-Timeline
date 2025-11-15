@@ -1771,6 +1771,11 @@ class StarlitTimelineApp {
     drawSequenceFrame(clip, img) {
         const ctx = this.previewCtx;
         
+        // 画像が完全に読み込まれているか確認
+        if (!img || !img.complete || img.width === 0 || img.height === 0) {
+            return; // 読み込み中は何も描画しない
+        }
+        
         let drawWidth, drawHeight;
         
         if (clip.useOriginalSize && img.width && img.height) {
@@ -1892,12 +1897,24 @@ class StarlitTimelineApp {
                 clip.imageElement = new Image();
                 clip.imageElement.onload = () => {
                     this.drawImageOnCanvas(clip);
+                    this.updatePreview(); // 読み込み完了後に再描画
+                    resolve();
+                };
+                clip.imageElement.onerror = () => {
+                    console.error('画像読み込みエラー:', clip.asset.name);
                     resolve();
                 };
                 clip.imageElement.src = clip.asset.url;
-            } else {
+            } else if (clip.imageElement.complete) {
                 this.drawImageOnCanvas(clip);
                 resolve();
+            } else {
+                // 読み込み中の場合は待つ
+                clip.imageElement.onload = () => {
+                    this.drawImageOnCanvas(clip);
+                    this.updatePreview();
+                    resolve();
+                };
             }
         });
     }
@@ -1905,6 +1922,11 @@ class StarlitTimelineApp {
     drawImageOnCanvas(clip) {
         const img = clip.imageElement;
         const ctx = this.previewCtx;
+        
+        // 画像が完全に読み込まれているか確認
+        if (!img || !img.complete || img.width === 0 || img.height === 0) {
+            return; // 読み込み中は何も描画しない
+        }
         
         let drawWidth, drawHeight;
         
@@ -2567,7 +2589,7 @@ class StarlitTimelineApp {
             if (clip.useOriginalSize && clip.originalWidth && clip.originalHeight) {
                 clipWidth = clip.originalWidth;
                 clipHeight = clip.originalHeight;
-            } else {
+            } else if (clip.imageElement.complete && clip.imageElement.width > 0 && clip.imageElement.height > 0) {
                 const aspectRatio = clip.imageElement.width / clip.imageElement.height;
                 clipWidth = this.previewCanvas.width;
                 clipHeight = this.previewCanvas.width / aspectRatio;
@@ -2580,7 +2602,7 @@ class StarlitTimelineApp {
             if (clip.useOriginalSize && clip.originalWidth && clip.originalHeight) {
                 clipWidth = clip.originalWidth;
                 clipHeight = clip.originalHeight;
-            } else {
+            } else if (clip.videoElement.readyState >= 2 && clip.videoElement.videoWidth > 0 && clip.videoElement.videoHeight > 0) {
                 const aspectRatio = clip.videoElement.videoWidth / clip.videoElement.videoHeight;
                 clipWidth = this.previewCanvas.width;
                 clipHeight = this.previewCanvas.width / aspectRatio;
@@ -2591,7 +2613,7 @@ class StarlitTimelineApp {
             }
         } else if (clip.asset.type === 'sequence' && clip.sequenceImages && clip.sequenceImages.length > 0) {
             const img = clip.sequenceImages[0];
-            if (img && img.complete) {
+            if (img && img.complete && img.width > 0 && img.height > 0) {
                 if (clip.useOriginalSize && img.width && img.height) {
                     clipWidth = img.width;
                     clipHeight = img.height;
