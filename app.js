@@ -4291,30 +4291,85 @@ class StarlitTimelineApp {
         
         const frames = Math.ceil((endTime - startTime) * this.fps);
         
-        if (!confirm(`${frames}フレームを書き出しますか?`)) {
+        if (!confirm(`${frames}フレームを連番PNG (ZIP圧縮) で書き出しますか?`)) {
             return;
         }
         
+        // 進捗表示用の要素を作成
+        const progressDiv = document.createElement('div');
+        progressDiv.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            z-index: 10000;
+            font-family: 'JK Maru Gothic M', sans-serif;
+            text-align: center;
+            min-width: 400px;
+        `;
+        progressDiv.innerHTML = `
+            <h3 style="margin: 0 0 15px 0;">連番PNG書き出し中...</h3>
+            <div id="sequenceProgress" style="margin: 10px 0;">0 / ${frames} フレーム</div>
+            <div style="font-size: 12px; color: #999; margin-top: 10px;">しばらくお待ちください...</div>
+        `;
+        document.body.appendChild(progressDiv);
+        
         const originalTime = this.currentTime;
+        
+        // JSZipライブラリを動的に読み込み
+        if (typeof JSZip === 'undefined') {
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+            await new Promise((resolve, reject) => {
+                script.onload = resolve;
+                script.onerror = reject;
+                document.head.appendChild(script);
+            });
+        }
+        
+        const zip = new JSZip();
+        const folder = zip.folder('sequence');
         
         for (let i = 0; i < frames; i++) {
             this.currentTime = startTime + (i / this.fps);
             this.updatePreview();
             
-            // フレームを画像として保存
+            // フレームを画像として取得
             const dataUrl = this.previewCanvas.toDataURL('image/png');
-            const a = document.createElement('a');
-            a.href = dataUrl;
-            a.download = `frame_${i.toString().padStart(5, '0')}.png`;
-            a.click();
+            const base64Data = dataUrl.split(',')[1];
             
-            await new Promise(resolve => setTimeout(resolve, 100));
+            // ZIPに追加
+            folder.file(`frame_${i.toString().padStart(5, '0')}.png`, base64Data, {base64: true});
+            
+            // 進捗更新
+            document.getElementById('sequenceProgress').textContent = `${i + 1} / ${frames} フレーム`;
+            
+            // UIの更新を待つ
+            await new Promise(resolve => setTimeout(resolve, 10));
         }
         
         this.currentTime = originalTime;
         this.updatePreview();
         
-        alert('連番PNG書き出しが完了しました!');
+        // ZIP圧縮
+        document.getElementById('sequenceProgress').textContent = 'ZIP圧縮中...';
+        const blob = await zip.generateAsync({type: 'blob'});
+        
+        // ダウンロード
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `sequence_${frames}frames.zip`;
+        a.click();
+        
+        // クリーンアップ
+        URL.revokeObjectURL(a.href);
+        document.body.removeChild(progressDiv);
+        
+        alert(`連番PNG書き出しが完了しました!\n${frames}フレームをZIPファイルにまとめました。`);
     }
     
     async exportAudio() {
