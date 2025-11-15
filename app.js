@@ -52,6 +52,17 @@ class StarlitTimelineApp {
                 opacity: 100,   // 0-100%, localStorage に保存
                 // キーフレーム対応
                 keyframes: []   // { time: number, blur, contrast, brightness, saturation, opacity }
+            },
+            colorKey: {
+                enabled: false,        // プロジェクトファイルに保存
+                color: '#00FF00',      // キー色（デフォルトはグリーン）
+                tolerance: 30,         // 許容値 0-100
+                invert: false,         // false: キー色を透過, true: キー色以外を透過
+                feather: 5             // エッジのぼかし 0-50
+            },
+            normalize: {
+                enabled: false,        // プロジェクトファイルに保存
+                strength: 1            // スムージング強度 0-3
             }
         };
         
@@ -198,6 +209,18 @@ class StarlitTimelineApp {
             this.effects.diffusion.enabled = e.target.checked;
             this.updatePreview();
         });
+        
+        // カラーキー有効/無効 - プロジェクト依存なのでキャッシュ保存しない
+        document.getElementById('colorKeyEnable').addEventListener('change', (e) => {
+            this.effects.colorKey.enabled = e.target.checked;
+            this.updatePreview();
+        });
+        
+        // ノーマライズ有効/無効 - プロジェクト依存なのでキャッシュ保存しない
+        document.getElementById('normalizeEnable').addEventListener('change', (e) => {
+            this.effects.normalize.enabled = e.target.checked;
+            this.updatePreview();
+        });
     }
     
     // グラデーションエフェクト更新（新規メソッド）
@@ -237,6 +260,77 @@ class StarlitTimelineApp {
         document.getElementById('diffusionContrastValue').textContent = `${this.effects.diffusion.contrast}`;
         document.getElementById('diffusionBrightnessValue').textContent = `${this.effects.diffusion.brightness}`;
         document.getElementById('diffusionSaturationValue').textContent = `${this.effects.diffusion.saturation}`;
+        document.getElementById('diffusionOpacityValue').textContent = `${this.effects.diffusion.opacity}%`;
+        
+        // キャッシュに自動保存
+        this.saveSettingsToCache();
+        
+        this.updatePreview();
+    }
+    
+    updateColorKeyEffect() {
+        // パラメータ取得
+        this.effects.colorKey.color = document.getElementById('colorKeyColor').value;
+        this.effects.colorKey.tolerance = parseFloat(document.getElementById('colorKeyTolerance').value);
+        this.effects.colorKey.feather = parseFloat(document.getElementById('colorKeyFeather').value);
+        this.effects.colorKey.invert = document.getElementById('colorKeyInvert').checked;
+        
+        // 表示値更新
+        document.getElementById('colorKeyToleranceValue').textContent = `${this.effects.colorKey.tolerance}`;
+        document.getElementById('colorKeyFeatherValue').textContent = `${this.effects.colorKey.feather}`;
+        
+        // キャッシュに自動保存
+        this.saveSettingsToCache();
+        
+        this.updatePreview();
+    }
+    
+    updateNormalizeEffect() {
+        // パラメータ取得
+        this.effects.normalize.strength = parseInt(document.getElementById('normalizeStrength').value);
+        
+        // 表示値更新
+        document.getElementById('normalizeStrengthValue').textContent = `${this.effects.normalize.strength}`;
+        
+        // キャッシュに自動保存
+        this.saveSettingsToCache();
+        
+        this.updatePreview();
+    }
+    
+    // スポイト機能（プレビューキャンバスから色を取得）
+    pickColorFromCanvas() {
+        if (!confirm('プレビュー画面の中央の色を取得します。よろしいですか？')) {
+            return;
+        }
+        
+        const ctx = this.previewCtx;
+        const width = this.previewCanvas.width;
+        const height = this.previewCanvas.height;
+        
+        // 中央のピクセルを取得
+        const x = Math.floor(width / 2);
+        const y = Math.floor(height / 2);
+        
+        const imageData = ctx.getImageData(x, y, 1, 1);
+        const data = imageData.data;
+        
+        const r = data[0];
+        const g = data[1];
+        const b = data[2];
+        
+        // RGBをHEXに変換
+        const hex = '#' + [r, g, b].map(x => {
+            const hex = x.toString(16);
+            return hex.length === 1 ? '0' + hex : hex;
+        }).join('');
+        
+        // カラーピッカーに設定
+        document.getElementById('colorKeyColor').value = hex;
+        this.updateColorKeyEffect();
+        
+        this.showNotification(`🎨 色を取得しました: ${hex}`);
+    }
         document.getElementById('diffusionOpacityValue').textContent = `${this.effects.diffusion.opacity}%`;
         
         // キャッシュに自動保存
@@ -1989,9 +2083,19 @@ class StarlitTimelineApp {
             ctx.fillRect(0, height - this.effects.letterbox.height, width, this.effects.letterbox.height);
         }
         
-        // ディフュージョン撮影エフェクト（最後に適用）
+        // ノーマライズ(スムージング)エフェクト（ディフュージョンより先に適用）
+        if (this.effects.normalize.enabled) {
+            this.applyNormalizeEffect(ctx, width, height);
+        }
+        
+        // ディフュージョン撮影エフェクト
         if (this.effects.diffusion.enabled) {
             this.applyDiffusionEffect(ctx, width, height);
+        }
+        
+        // カラーキーエフェクト（最後に適用して透過処理）
+        if (this.effects.colorKey.enabled) {
+            this.applyColorKeyEffect(ctx, width, height);
         }
     }
     
@@ -2165,6 +2269,133 @@ class StarlitTimelineApp {
         }
         
         return kernel;
+    }
+    
+    // カラーキーエフェクトの適用
+    applyColorKeyEffect(ctx, width, height) {
+        const imageData = ctx.getImageData(0, 0, width, height);
+        const data = imageData.data;
+        
+        // キー色をRGBに変換
+        const keyColor = this.hexToRgb(this.effects.colorKey.color);
+        const tolerance = this.effects.colorKey.tolerance;
+        const invert = this.effects.colorKey.invert;
+        const feather = this.effects.colorKey.feather;
+        
+        // 各ピクセルを処理
+        for (let i = 0; i < data.length; i += 4) {
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+            
+            // 色の距離を計算（ユークリッド距離）
+            const distance = Math.sqrt(
+                Math.pow(r - keyColor.r, 2) +
+                Math.pow(g - keyColor.g, 2) +
+                Math.pow(b - keyColor.b, 2)
+            );
+            
+            // 最大距離（RGB空間での対角線）
+            const maxDistance = Math.sqrt(255 * 255 * 3);
+            
+            // 正規化された距離（0-100）
+            const normalizedDistance = (distance / maxDistance) * 100;
+            
+            // 許容値との比較
+            let alpha = 255;
+            
+            if (normalizedDistance <= tolerance) {
+                // キー色の範囲内
+                if (feather > 0 && normalizedDistance > tolerance - feather) {
+                    // フェザー範囲内 - グラデーション
+                    const featherFactor = (normalizedDistance - (tolerance - feather)) / feather;
+                    alpha = invert ? featherFactor * 255 : (1 - featherFactor) * 255;
+                } else {
+                    // 完全にキー色
+                    alpha = invert ? 0 : 255;
+                }
+            } else {
+                // キー色の範囲外
+                alpha = invert ? 255 : 0;
+            }
+            
+            data[i + 3] = alpha;
+        }
+        
+        ctx.putImageData(imageData, 0, 0);
+    }
+    
+    // ノーマライズ(スムージング)エフェクトの適用
+    applyNormalizeEffect(ctx, width, height) {
+        const imageData = ctx.getImageData(0, 0, width, height);
+        const data = imageData.data;
+        const tempData = new Uint8ClampedArray(data);
+        
+        const strength = Math.max(1, Math.min(3, this.effects.normalize.strength));
+        
+        // スムージング処理（強度に応じて複数回適用）
+        for (let pass = 0; pass < strength; pass++) {
+            tempData.set(data);
+            
+            // 各ピクセルを処理（エッジ部分のみスムージング）
+            for (let y = 1; y < height - 1; y++) {
+                for (let x = 1; x < width - 1; x++) {
+                    const idx = (y * width + x) * 4;
+                    
+                    // 現在のピクセル
+                    const r = tempData[idx];
+                    const g = tempData[idx + 1];
+                    const b = tempData[idx + 2];
+                    
+                    // 周囲8ピクセルの平均を計算
+                    let sumR = 0, sumG = 0, sumB = 0;
+                    let count = 0;
+                    
+                    for (let dy = -1; dy <= 1; dy++) {
+                        for (let dx = -1; dx <= 1; dx++) {
+                            if (dx === 0 && dy === 0) continue;
+                            
+                            const neighborIdx = ((y + dy) * width + (x + dx)) * 4;
+                            const nr = tempData[neighborIdx];
+                            const ng = tempData[neighborIdx + 1];
+                            const nb = tempData[neighborIdx + 2];
+                            
+                            // 色の差が大きい場合のみ（エッジ検出）
+                            const diff = Math.abs(r - nr) + Math.abs(g - ng) + Math.abs(b - nb);
+                            
+                            if (diff > 30) {  // エッジ閾値
+                                sumR += nr;
+                                sumG += ng;
+                                sumB += nb;
+                                count++;
+                            }
+                        }
+                    }
+                    
+                    // エッジが検出された場合のみスムージング
+                    if (count > 0) {
+                        const avgR = sumR / count;
+                        const avgG = sumG / count;
+                        const avgB = sumB / count;
+                        
+                        // 元の色と平均をブレンド（50%）
+                        data[idx] = (r + avgR) / 2;
+                        data[idx + 1] = (g + avgG) / 2;
+                        data[idx + 2] = (b + avgB) / 2;
+                    }
+                }
+            }
+        }
+        
+        ctx.putImageData(imageData, 0, 0);
+    }
+    
+    // HEXカラーをRGBに変換
+    hexToRgb(hex) {
+        const r = parseInt(hex.slice(1, 3), 16);
+        const g = parseInt(hex.slice(3, 5), 16);
+        const b = parseInt(hex.slice(5, 7), 16);
+        return { r, g, b };
     }
     
     // 現在時刻におけるディフュージョンパラメータを取得（キーフレーム補間）
@@ -2734,7 +2965,9 @@ class StarlitTimelineApp {
             effectsEnabled: {
                 letterbox: this.effects.letterbox.enabled,
                 gradient: this.effects.gradient.enabled,
-                diffusion: this.effects.diffusion.enabled
+                diffusion: this.effects.diffusion.enabled,
+                colorKey: this.effects.colorKey.enabled,
+                normalize: this.effects.normalize.enabled
             },
             // ディフュージョンキーフレームはプロジェクトに保存
             diffusionKeyframes: this.effects.diffusion.keyframes,
@@ -2827,6 +3060,8 @@ class StarlitTimelineApp {
                     this.effects.letterbox.enabled = project.effectsEnabled.letterbox || false;
                     this.effects.gradient.enabled = project.effectsEnabled.gradient || false;
                     this.effects.diffusion.enabled = project.effectsEnabled.diffusion || false;
+                    this.effects.colorKey.enabled = project.effectsEnabled.colorKey || false;
+                    this.effects.normalize.enabled = project.effectsEnabled.normalize || false;
                 }
                 
                 // ディフュージョンキーフレームを復元
@@ -3189,6 +3424,20 @@ class StarlitTimelineApp {
         document.getElementById('diffusionOpacity').value = this.effects.diffusion.opacity;
         document.getElementById('diffusionOpacityValue').textContent = `${this.effects.diffusion.opacity}%`;
         
+        // カラーキー
+        document.getElementById('colorKeyEnable').checked = this.effects.colorKey.enabled;
+        document.getElementById('colorKeyColor').value = this.effects.colorKey.color;
+        document.getElementById('colorKeyTolerance').value = this.effects.colorKey.tolerance;
+        document.getElementById('colorKeyToleranceValue').textContent = `${this.effects.colorKey.tolerance}`;
+        document.getElementById('colorKeyFeather').value = this.effects.colorKey.feather;
+        document.getElementById('colorKeyFeatherValue').textContent = `${this.effects.colorKey.feather}`;
+        document.getElementById('colorKeyInvert').checked = this.effects.colorKey.invert;
+        
+        // ノーマライズ
+        document.getElementById('normalizeEnable').checked = this.effects.normalize.enabled;
+        document.getElementById('normalizeStrength').value = this.effects.normalize.strength;
+        document.getElementById('normalizeStrengthValue').textContent = `${this.effects.normalize.strength}`;
+        
         // キーフレームリスト更新
         this.updateDiffusionKeyframeList();
     }
@@ -3249,6 +3498,15 @@ class StarlitTimelineApp {
                         brightness: this.effects.diffusion.brightness,
                         saturation: this.effects.diffusion.saturation,
                         opacity: this.effects.diffusion.opacity
+                    },
+                    colorKey: {
+                        color: this.effects.colorKey.color,
+                        tolerance: this.effects.colorKey.tolerance,
+                        feather: this.effects.colorKey.feather,
+                        invert: this.effects.colorKey.invert
+                    },
+                    normalize: {
+                        strength: this.effects.normalize.strength
                     }
                 }
             };
@@ -3298,6 +3556,21 @@ class StarlitTimelineApp {
                         this.effects.diffusion.brightness = diff.brightness || 0;
                         this.effects.diffusion.saturation = diff.saturation || 0;
                         this.effects.diffusion.opacity = diff.opacity !== undefined ? diff.opacity : 100;
+                    }
+                    
+                    // カラーキーパラメーター
+                    if (settings.effectParameters.colorKey) {
+                        const ck = settings.effectParameters.colorKey;
+                        this.effects.colorKey.color = ck.color || '#00FF00';
+                        this.effects.colorKey.tolerance = ck.tolerance !== undefined ? ck.tolerance : 30;
+                        this.effects.colorKey.feather = ck.feather !== undefined ? ck.feather : 5;
+                        this.effects.colorKey.invert = ck.invert || false;
+                    }
+                    
+                    // ノーマライズパラメーター
+                    if (settings.effectParameters.normalize) {
+                        const norm = settings.effectParameters.normalize;
+                        this.effects.normalize.strength = norm.strength !== undefined ? norm.strength : 1;
                     }
                 }
                 
