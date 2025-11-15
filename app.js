@@ -119,6 +119,14 @@ class StarlitTimelineApp {
         // プレビューズーム機能
         this.previewZoom = 100; // パーセント表示（100% = 原寸）
         
+        // キーフレーム画像を読み込み
+        this.keyframeImage = new Image();
+        this.keyframeImage.src = 'key.png';
+        
+        // キーフレーム操作用
+        this.isDraggingKeyframe = false;
+        this.draggingKeyframe = null; // {clip, property, index}
+        
         // スポイトモード
         this.eyedropperMode = false;
         
@@ -164,6 +172,12 @@ class StarlitTimelineApp {
     setupEventListeners() {
         // タイムラインキャンバスイベント
         this.timelineCanvas.addEventListener('mousedown', (e) => this.handleTimelineMouseDown(e));
+        
+        // タイムラインキャンバスの右クリックメニューを無効化
+        this.timelineCanvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            return false;
+        });
         
         // mouseupとmousemoveはdocumentレベルで監視（ドラッグ中にキャンバス外に出ても対応）
         document.addEventListener('mousemove', (e) => this.handleTimelineMouseMove(e));
@@ -931,17 +945,30 @@ class StarlitTimelineApp {
     
     drawKeyframeIndicators(clip, clipX, clipY, clipHeight) {
         const ctx = this.timelineCtx;
+        const keyframeSize = 16; // くま画像のサイズ
         
         Object.keys(clip.keyframes).forEach(property => {
             const keyframes = clip.keyframes[property];
             keyframes.forEach(kf => {
                 const x = clipX + (kf.time * this.zoom);
-                const y = clipY + clipHeight - 5;
+                const y = clipY + clipHeight - keyframeSize - 2;
                 
-                ctx.fillStyle = '#FFFF00';
-                ctx.beginPath();
-                ctx.arc(x, y, 4, 0, Math.PI * 2);
-                ctx.fill();
+                // くま画像が読み込まれていれば画像を描画、なければ黄色い丸
+                if (this.keyframeImage && this.keyframeImage.complete) {
+                    ctx.drawImage(
+                        this.keyframeImage,
+                        x - keyframeSize / 2,
+                        y,
+                        keyframeSize,
+                        keyframeSize
+                    );
+                } else {
+                    // フォールバック: 黄色い丸
+                    ctx.fillStyle = '#FFFF00';
+                    ctx.beginPath();
+                    ctx.arc(x, y + keyframeSize / 2, 4, 0, Math.PI * 2);
+                    ctx.fill();
+                }
             });
         });
     }
@@ -1009,6 +1036,26 @@ class StarlitTimelineApp {
         
         console.log('座標:', x, y);
         
+        // 右クリックの場合、キーフレーム削除をチェック
+        if (e.button === 2) {
+            const keyframe = this.getKeyframeAt(x, y);
+            if (keyframe) {
+                e.preventDefault();
+                this.deleteKeyframe(keyframe.clip, keyframe.property, keyframe.index);
+                return;
+            }
+        }
+        
+        // 左クリックの場合、キーフレームドラッグをチェック
+        const keyframe = this.getKeyframeAt(x, y);
+        if (keyframe) {
+            this.isDraggingKeyframe = true;
+            this.draggingKeyframe = keyframe;
+            this.dragStartX = x;
+            console.log('キーフレームドラッグ開始');
+            return;
+        }
+        
         // クリップ選択
         const clickedClip = this.getClipAt(x, y);
         console.log('クリックしたクリップ:', clickedClip ? clickedClip.asset.name : 'なし');
@@ -1069,6 +1116,29 @@ class StarlitTimelineApp {
             return;
         }
         
+        // キーフレームドラッグ中
+        if (this.isDraggingKeyframe && this.draggingKeyframe) {
+            const rect = this.timelineCanvas.getBoundingClientRect();
+            const scrollContainer = document.getElementById('timelineScroll');
+            const x = e.clientX - rect.left + scrollContainer.scrollLeft;
+            
+            const deltaX = x - this.dragStartX;
+            const newTime = this.draggingKeyframe.keyframe.time + (deltaX / this.zoom);
+            
+            // クリップの範囲内に制限
+            const clip = this.draggingKeyframe.clip;
+            const maxTime = clip.duration;
+            this.draggingKeyframe.keyframe.time = Math.max(0, Math.min(newTime, maxTime));
+            
+            // キーフレームを時刻順にソート
+            clip.keyframes[this.draggingKeyframe.property].sort((a, b) => a.time - b.time);
+            
+            this.drawTimeline();
+            this.updatePreview();
+            this.updatePropertiesPanel();
+            return;
+        }
+        
         // クリップドラッグ中
         if (!this.isDragging || !this.selectedClip || !this.initialClipPosition) return;
         
@@ -1107,6 +1177,14 @@ class StarlitTimelineApp {
         // console.log('isPreviewDragging:', this.isPreviewDragging);
         // console.log('クリップ数:', this.clips.length);
         
+        // キーフレームドラッグ終了
+        if (this.isDraggingKeyframe) {
+            this.isDraggingKeyframe = false;
+            this.draggingKeyframe = null;
+            this.saveHistory();
+            return;
+        }
+        
         // プレビューキャンバスでのドラッグ中は何もしない
         if (this.isPreviewDragging) {
             // console.log('プレビュードラッグ中なのでスキップ');
@@ -1140,6 +1218,52 @@ class StarlitTimelineApp {
             }
         }
         return null;
+    }
+    
+    getKeyframeAt(x, y) {
+        const keyframeSize = 16;
+        const hitArea = 12; // クリック判定を少し広げる
+        
+        for (let clip of this.clips) {
+            const clipX = clip.startTime * this.zoom;
+            const clipY = clip.track * this.trackHeight;
+            const clipHeight = this.trackHeight;
+            
+            // クリップの範囲内か確認
+            if (y < clipY || y > clipY + clipHeight) continue;
+            
+            // すべてのプロパティのキーフレームをチェック
+            for (let property in clip.keyframes) {
+                const keyframes = clip.keyframes[property];
+                for (let i = 0; i < keyframes.length; i++) {
+                    const kf = keyframes[i];
+                    const kfX = clipX + (kf.time * this.zoom);
+                    const kfY = clipY + clipHeight - keyframeSize - 2;
+                    
+                    // 当たり判定
+                    if (Math.abs(x - kfX) < hitArea && 
+                        y >= kfY && y <= kfY + keyframeSize) {
+                        return {
+                            clip: clip,
+                            property: property,
+                            index: i,
+                            keyframe: kf
+                        };
+                    }
+                }
+            }
+        }
+        return null;
+    }
+    
+    deleteKeyframe(clip, property, index) {
+        if (confirm('このキーフレームを削除しますか?')) {
+            clip.keyframes[property].splice(index, 1);
+            this.drawTimeline();
+            this.updatePreview();
+            this.updatePropertiesPanel();
+            this.saveHistory();
+        }
     }
     
     // オートトリミング機能
