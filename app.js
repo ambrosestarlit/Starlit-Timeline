@@ -1737,56 +1737,6 @@ class StarlitTimelineApp {
         }
     }
     
-    splitClip() {
-        if (!this.selectedClip) return;
-        
-        const localTime = this.currentTime - this.selectedClip.startTime;
-        
-        if (localTime <= 0 || localTime >= this.selectedClip.duration) {
-            alert('クリップの範囲内で分割してください');
-            return;
-        }
-        
-        // 新しいクリップを作成（後半部分）
-        const newClip = JSON.parse(JSON.stringify(this.selectedClip));
-        newClip.id = Date.now() + Math.random();
-        newClip.startTime = this.selectedClip.startTime + localTime;
-        newClip.duration = this.selectedClip.duration - localTime;
-        
-        // 動画・音声・連番画像の場合のみtrimStartを調整
-        // 画像は静止画なのでtrimStartは不要
-        if (this.selectedClip.asset.type !== 'image') {
-            if (!newClip.trimStart) newClip.trimStart = 0;
-            newClip.trimStart = (this.selectedClip.trimStart || 0) + localTime;
-        }
-        
-        // キーフレームを調整
-        Object.keys(newClip.keyframes).forEach(property => {
-            newClip.keyframes[property] = newClip.keyframes[property]
-                .filter(kf => kf.time >= localTime)
-                .map(kf => ({ time: kf.time - localTime, value: kf.value }));
-        });
-        
-        // 元のクリップの長さを調整（前半部分）
-        this.selectedClip.duration = localTime;
-        Object.keys(this.selectedClip.keyframes).forEach(property => {
-            this.selectedClip.keyframes[property] = this.selectedClip.keyframes[property]
-                .filter(kf => kf.time <= localTime);
-        });
-        
-        // trimStartは元のクリップでは変更なし（先頭から再生）
-        
-        this.clips.push(newClip);
-        this.drawTimeline();
-        this.saveHistory();
-        
-        console.log('✂️ クリップを分割:', {
-            タイプ: this.selectedClip.asset.type,
-            前半: { startTime: this.selectedClip.startTime, duration: this.selectedClip.duration, trimStart: this.selectedClip.trimStart || 0 },
-            後半: { startTime: newClip.startTime, duration: newClip.duration, trimStart: newClip.trimStart || 0 }
-        });
-    }
-    
     deleteSelected() {
         if (!this.selectedClip) return;
         

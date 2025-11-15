@@ -73,7 +73,6 @@ python3 -m http.server 8000
 - `Delete` - 選択クリップを削除
 - `Ctrl+Z` - 元に戻す
 - `Ctrl+Y` - やり直し
-- `Ctrl+Shift+D` - クリップを分割
 
 ## エフェクト詳細 ✨
 
