@@ -1807,9 +1807,12 @@ class StarlitTimelineApp {
         // エフェクト適用
         this.applyEffects();
         
-        // バウンディングボックスを描画（選択クリップがある場合）
+        // バウンディングボックスを描画（動画・画像・連番画像クリップを選択している場合のみ）
         if (this.selectedClip && activeClips.includes(this.selectedClip)) {
-            this.drawBoundingBox(this.selectedClip);
+            const clipType = this.selectedClip.asset.type;
+            if (clipType === 'video' || clipType === 'image' || clipType === 'sequence') {
+                this.drawBoundingBox(this.selectedClip);
+            }
         }
     }
     
