@@ -331,13 +331,6 @@ class StarlitTimelineApp {
         
         this.showNotification(`🎨 色を取得しました: ${hex}`);
     }
-        document.getElementById('diffusionOpacityValue').textContent = `${this.effects.diffusion.opacity}%`;
-        
-        // キャッシュに自動保存
-        this.saveSettingsToCache();
-        
-        this.updatePreview();
-    }
     
     // ディフュージョンキーフレーム追加
     addDiffusionKeyframe() {
