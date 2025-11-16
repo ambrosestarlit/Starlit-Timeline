@@ -744,6 +744,23 @@ body {
     font-size: 12px;
 }
 
+.value-input {
+    width: 60px;
+    background: var(--chocolate-main);
+    border: 1px solid var(--chocolate-dark);
+    border-radius: 4px;
+    padding: 2px 4px;
+    color: var(--biscuit-light);
+    font-size: 12px;
+    text-align: right;
+    margin: 0 4px;
+}
+
+.value-input:focus {
+    outline: 2px solid var(--accent-orange);
+    background: var(--chocolate-dark);
+}
+
 .property-input option {
     background: var(--chocolate-main);
     color: var(--biscuit-light);

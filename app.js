@@ -163,6 +163,17 @@ class StarlitTimelineApp {
         };
         this.seekbarImage.src = 'seekbar.png';
         
+        // ピン画像を読み込み（pin-01.png ~ pin-05.png）
+        this.pinImages = [];
+        for (let i = 1; i <= 5; i++) {
+            const pinImage = new Image();
+            pinImage.src = `pin-0${i}.png`;
+            pinImage.onload = () => {
+                this.drawTimeline(); // 画像読み込み完了後に再描画
+            };
+            this.pinImages.push(pinImage);
+        }
+        
         // キーフレーム操作用
         this.isDraggingKeyframe = false;
         this.draggingKeyframe = null; // {clip, property, index}
@@ -243,6 +254,14 @@ class StarlitTimelineApp {
         this.previewArea.addEventListener('mousemove', (e) => this.handlePreviewCanvasHover(e));
         document.addEventListener('mousemove', (e) => this.handlePreviewMouseMove(e));
         document.addEventListener('mouseup', (e) => this.handlePreviewMouseUp(e));
+        
+        // プレビューエリアの右クリックメニューを無効化（ピン削除に使用）
+        this.previewArea.addEventListener('contextmenu', (e) => {
+            if (this.isPuppetEditMode) {
+                e.preventDefault();
+                return false;
+            }
+        });
         
         // タイムラインスクロールエリアのドラッグ&ドロップ（素材追加用）
         const timelineScroll = document.getElementById('timelineScroll');
@@ -1510,8 +1529,8 @@ class StarlitTimelineApp {
         // キーフレームインジケーター（全てのクリップタイプで表示）
         this.drawKeyframeIndicators(clip, x, y, height);
         
-        // 音声クリップの場合は波形表示
-        if (clip.asset.type === 'audio') {
+        // 音声クリップまたは動画クリップの場合は波形表示
+        if (clip.asset.type === 'audio' || clip.asset.type === 'video') {
             this.drawAudioWaveform(clip, x, y, width, height);
         }
     }
@@ -1547,34 +1566,152 @@ class StarlitTimelineApp {
         const ctx = this.timelineCtx;
         const centerY = y + height / 2;
         
-        // シンプルな波形表示
-        ctx.strokeStyle = '#F5DEB3';
-        ctx.lineWidth = 1;
-        ctx.globalAlpha = 0.5;
+        // 音声データがまだ解析されていない場合は解析開始
+        if (!clip.waveformData && clip.audioElement && clip.audioElement.src) {
+            this.analyzeAudioWaveform(clip);
+            // 解析中は簡易波形を表示
+            ctx.strokeStyle = '#F5DEB3';
+            ctx.lineWidth = 1;
+            ctx.globalAlpha = 0.3;
+            ctx.beginPath();
+            for (let i = 0; i < width; i += 5) {
+                const waveHeight = Math.sin(i / 10) * (height / 6);
+                if (i === 0) {
+                    ctx.moveTo(x + i, centerY + waveHeight);
+                } else {
+                    ctx.lineTo(x + i, centerY + waveHeight);
+                }
+            }
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+            return;
+        }
         
-        ctx.beginPath();
-        for (let i = 0; i < width; i += 5) {
-            const waveHeight = Math.sin(i / 10) * (height / 4);
-            if (i === 0) {
-                ctx.moveTo(x + i, centerY + waveHeight);
-            } else {
-                ctx.lineTo(x + i, centerY + waveHeight);
+        // 波形データがある場合は実際の波形を描画
+        if (clip.waveformData) {
+            const trimStart = clip.trimStart || clip.offset || 0;
+            const sampleRate = clip.waveformData.sampleRate;
+            const samples = clip.waveformData.samples;
+            const originalDuration = clip.originalDuration || (samples.length / sampleRate);
+            
+            // ループが有効な場合は波形を繰り返し描画
+            const loopEnabled = clip.loopEnabled || false;
+            
+            // 波形を描画
+            ctx.strokeStyle = '#F5DEB3';
+            ctx.fillStyle = 'rgba(245, 222, 179, 0.3)';
+            ctx.lineWidth = 1;
+            
+            ctx.beginPath();
+            ctx.moveTo(x, centerY);
+            
+            // 上半分の波形
+            for (let i = 0; i < width; i++) {
+                const timeInClip = (i / width) * clip.duration;
+                let actualTime = trimStart + timeInClip;
+                
+                // ループ対応：元の長さを超えたら繰り返し
+                if (loopEnabled && actualTime >= originalDuration) {
+                    actualTime = trimStart + (timeInClip % (originalDuration - trimStart));
+                }
+                
+                const sampleIndex = Math.floor(actualTime * sampleRate);
+                
+                if (sampleIndex >= 0 && sampleIndex < samples.length) {
+                    const waveHeight = Math.abs(samples[sampleIndex]) * (height / 2) * 0.8;
+                    ctx.lineTo(x + i, centerY - waveHeight);
+                } else {
+                    ctx.lineTo(x + i, centerY);
+                }
+            }
+            
+            // 下半分の波形（逆順）
+            for (let i = width - 1; i >= 0; i--) {
+                const timeInClip = (i / width) * clip.duration;
+                let actualTime = trimStart + timeInClip;
+                
+                // ループ対応
+                if (loopEnabled && actualTime >= originalDuration) {
+                    actualTime = trimStart + (timeInClip % (originalDuration - trimStart));
+                }
+                
+                const sampleIndex = Math.floor(actualTime * sampleRate);
+                
+                if (sampleIndex >= 0 && sampleIndex < samples.length) {
+                    const waveHeight = Math.abs(samples[sampleIndex]) * (height / 2) * 0.8;
+                    ctx.lineTo(x + i, centerY + waveHeight);
+                } else {
+                    ctx.lineTo(x + i, centerY);
+                }
+            }
+            
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            
+            // ループ境界線を描画
+            if (loopEnabled && clip.duration > originalDuration - trimStart) {
+                const loopPointPixel = ((originalDuration - trimStart) / clip.duration) * width;
+                ctx.strokeStyle = 'rgba(255, 165, 0, 0.5)';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath();
+                ctx.moveTo(x + loopPointPixel, y);
+                ctx.lineTo(x + loopPointPixel, y + height);
+                ctx.stroke();
+                ctx.setLineDash([]);
             }
         }
-        ctx.stroke();
+    }
+    
+    // 音声波形データを解析
+    async analyzeAudioWaveform(clip) {
+        if (!clip.audioElement || !clip.audioElement.src || clip.waveformData) return;
         
-        ctx.globalAlpha = 1;
+        try {
+            const response = await fetch(clip.audioElement.src);
+            const arrayBuffer = await response.arrayBuffer();
+            const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer.slice(0));
+            
+            // モノラルに変換（全チャンネルの平均）
+            const numChannels = audioBuffer.numberOfChannels;
+            const length = audioBuffer.length;
+            const sampleRate = audioBuffer.sampleRate;
+            const samples = new Float32Array(length);
+            
+            for (let i = 0; i < length; i++) {
+                let sum = 0;
+                for (let channel = 0; channel < numChannels; channel++) {
+                    sum += audioBuffer.getChannelData(channel)[i];
+                }
+                samples[i] = sum / numChannels;
+            }
+            
+            clip.waveformData = {
+                samples: samples,
+                sampleRate: sampleRate
+            };
+            
+            // 波形データが準備できたらタイムラインを再描画
+            this.drawTimeline();
+        } catch (err) {
+            console.error('波形解析エラー:', err);
+        }
     }
     
     drawKeyframeIndicators(clip, clipX, clipY, clipHeight) {
         const ctx = this.timelineCtx;
         const keyframeSize = 16; // くま画像のサイズ
+        const pinKeyframeSize = 12; // ピンのキーフレーム画像サイズ（小さめ）
         
+        let yOffset = 0; // キーフレームを縦に並べるためのオフセット
+        
+        // 通常のキーフレーム（Transform、Opacity、Scaleなど）
         Object.keys(clip.keyframes).forEach(property => {
             const keyframes = clip.keyframes[property];
             keyframes.forEach(kf => {
                 const x = clipX + (kf.time * this.zoom);
-                const y = clipY + clipHeight - keyframeSize - 2;
+                const y = clipY + clipHeight - keyframeSize - 2 - yOffset;
                 
                 // くま画像が読み込まれていれば画像を描画、なければ黄色い丸
                 if (this.keyframeImage && this.keyframeImage.complete) {
@@ -1594,6 +1731,42 @@ class StarlitTimelineApp {
                 }
             });
         });
+        
+        // ピンのキーフレーム
+        if (clip.puppet && clip.puppet.enabled && clip.puppet.pins && clip.puppet.pins.length > 0) {
+            clip.puppet.pins.forEach((pin, pinIndex) => {
+                if (pin.keyframes && pin.keyframes.length > 0) {
+                    // ピンのインデックスから対応する画像を取得（1-5の範囲）
+                    const pinImageIndex = ((pinIndex % 5) + 1);
+                    const pinImage = this.pinImages[pinImageIndex - 1]; // 0-indexedの配列
+                    
+                    pin.keyframes.forEach(kf => {
+                        const x = clipX + (kf.time * this.zoom);
+                        const y = clipY + clipHeight - pinKeyframeSize - 2 - yOffset;
+                        
+                        // ピン画像が読み込まれていれば画像を描画
+                        if (pinImage && pinImage.complete) {
+                            ctx.drawImage(
+                                pinImage,
+                                x - pinKeyframeSize / 2,
+                                y,
+                                pinKeyframeSize,
+                                pinKeyframeSize
+                            );
+                        } else {
+                            // フォールバック: 色付きの丸
+                            const pinColors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8'];
+                            ctx.fillStyle = pinColors[pinIndex % 5];
+                            ctx.beginPath();
+                            ctx.arc(x, y + pinKeyframeSize / 2, 4, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
+                    });
+                    
+                    yOffset += pinKeyframeSize + 2; // 次のピンのキーフレームは少し上に表示
+                }
+            });
+        }
     }
     
     drawPlayhead() {
@@ -2010,17 +2183,21 @@ class StarlitTimelineApp {
             </div>
             
             <div class="property-group">
-                <div class="property-label">開始時間: <span id="startTimeValue">${clip.startTime.toFixed(2)}秒</span></div>
-                <input type="range" class="property-slider" value="${clip.startTime.toFixed(2)}" 
+                <div class="property-label">開始時間: <input type="number" id="startTimeValue" value="${clip.startTime.toFixed(2)}" 
+                    min="0" max="30" step="0.1" class="value-input"
+                    oninput="app.updateClipProperty('startTime', parseFloat(this.value)); document.getElementById('startTimeSlider').value = this.value">秒</div>
+                <input type="range" class="property-slider" id="startTimeSlider" value="${clip.startTime.toFixed(2)}" 
                     min="0" max="30" step="0.1"
-                    oninput="app.updateClipProperty('startTime', parseFloat(this.value)); document.getElementById('startTimeValue').textContent = this.value + '秒'">
+                    oninput="app.updateClipProperty('startTime', parseFloat(this.value)); document.getElementById('startTimeValue').value = this.value">
             </div>
             
             <div class="property-group">
-                <div class="property-label">継続時間: <span id="durationValue">${clip.duration.toFixed(2)}秒</span></div>
-                <input type="range" class="property-slider" value="${clip.duration.toFixed(2)}" 
+                <div class="property-label">継続時間: <input type="number" id="durationValue" value="${clip.duration.toFixed(2)}" 
+                    min="0.1" max="30" step="0.1" class="value-input"
+                    oninput="app.updateClipProperty('duration', parseFloat(this.value)); document.getElementById('durationSlider').value = this.value">秒</div>
+                <input type="range" class="property-slider" id="durationSlider" value="${clip.duration.toFixed(2)}" 
                     min="0.1" max="30" step="0.1"
-                    oninput="app.updateClipProperty('duration', parseFloat(this.value)); document.getElementById('durationValue').textContent = this.value + '秒'">
+                    oninput="app.updateClipProperty('duration', parseFloat(this.value)); document.getElementById('durationValue').value = this.value">
             </div>
         `;
         
@@ -2038,11 +2215,12 @@ class StarlitTimelineApp {
         if (clip.asset.type === 'sequence') {
             propertiesHTML += `
                 <div class="property-group">
-                    <div class="property-label">フレームレート: <span id="frameRateValue">${clip.frameRate || 30} fps</span></div>
-                    <input type="range" class="property-slider" value="${clip.frameRate || 30}" 
-                        min="1" max="60" step="1"
-                        oninput="document.getElementById('frameRateValue').textContent = this.value + ' fps'"
-                        onchange="app.updateClipProperty('frameRate', parseInt(this.value))">
+                    <div class="property-label">フレームレート: <input type="number" id="frameRateValue" value="${clip.frameRate || 30}" 
+                        min="1" max="120" step="1" class="value-input"
+                        oninput="app.updateClipProperty('frameRate', parseInt(this.value)); document.getElementById('frameRateSlider').value = this.value"> fps</div>
+                    <input type="range" class="property-slider" id="frameRateSlider" value="${clip.frameRate || 30}" 
+                        min="1" max="120" step="1"
+                        oninput="app.updateClipProperty('frameRate', parseInt(this.value)); document.getElementById('frameRateValue').value = this.value">
                 </div>
             `;
         }
@@ -2342,10 +2520,12 @@ class StarlitTimelineApp {
                 </div>
                 <div class="property-section-content" id="audioContent">
                     <div class="property-group">
-                        <div class="property-label">音量: <span id="volumeValue">${(clip.volume * 100).toFixed(0)}%</span></div>
-                        <input type="range" class="property-slider" value="${(clip.volume * 100).toFixed(0)}" 
-                            min="0" max="100" step="1"
-                            oninput="app.updateClipProperty('volume', parseFloat(this.value) / 100); document.getElementById('volumeValue').textContent = this.value + '%'">
+                        <div class="property-label">音量: <input type="number" id="volumeValue" value="${(clip.volume * 100).toFixed(0)}" 
+                            min="0" max="200" step="1" class="value-input"
+                            oninput="app.updateClipProperty('volume', parseFloat(this.value) / 100); document.getElementById('volumeSlider').value = this.value">%</div>
+                        <input type="range" class="property-slider" id="volumeSlider" value="${(clip.volume * 100).toFixed(0)}" 
+                            min="0" max="200" step="1"
+                            oninput="app.updateClipProperty('volume', parseFloat(this.value) / 100); document.getElementById('volumeValue').value = this.value">
                     </div>
                     
                     <!-- PAN -->
@@ -2556,8 +2736,36 @@ class StarlitTimelineApp {
     updateClipProperty(property, value) {
         if (!this.selectedClip) return;
         
+        // 開始時間を変更した場合、offsetを調整（継続時間は変えない）
+        if (property === 'startTime') {
+            const oldStartTime = this.selectedClip.startTime;
+            const newStartTime = value;
+            const timeDiff = newStartTime - oldStartTime;
+            
+            // 開始時間が増えた場合（右に移動）
+            if (timeDiff > 0) {
+                // offsetを増やして左側をトリミング（継続時間はそのまま）
+                const currentOffset = this.selectedClip.offset || 0;
+                this.selectedClip.offset = currentOffset + timeDiff;
+                
+                // offsetが元の長さを超えないようにする
+                const maxOffset = (this.selectedClip.originalDuration || this.selectedClip.duration) - 0.1;
+                if (this.selectedClip.offset > maxOffset) {
+                    this.selectedClip.offset = maxOffset;
+                }
+            }
+            // 開始時間が減った場合（左に移動）
+            else if (timeDiff < 0) {
+                const currentOffset = this.selectedClip.offset || 0;
+                
+                // offsetを減らす
+                this.selectedClip.offset = Math.max(0, currentOffset + timeDiff);
+            }
+            
+            this.selectedClip[property] = value;
+        }
         // ループ回数を変更した場合、元の長さを保存
-        if (property === 'loopCount') {
+        else if (property === 'loopCount') {
             // 初回の場合、現在の長さを元の長さとして保存
             if (!this.selectedClip.originalDuration) {
                 this.selectedClip.originalDuration = this.selectedClip.duration;
@@ -2570,7 +2778,21 @@ class StarlitTimelineApp {
             console.log('ループ回数変更:', value);
             console.log('元の長さ:', this.selectedClip.originalDuration);
             console.log('新しい長さ:', this.selectedClip.duration);
-        } else {
+        }
+        // 継続時間を変更した場合、音声・動画クリップはループ有効化
+        else if (property === 'duration') {
+            this.selectedClip[property] = value;
+            
+            // 音声または動画クリップで、継続時間が元の長さを超えた場合はループ有効化
+            if ((this.selectedClip.asset.type === 'audio' || this.selectedClip.asset.type === 'video')) {
+                const originalDuration = this.selectedClip.originalDuration || value;
+                if (value > originalDuration) {
+                    this.selectedClip.loopEnabled = true;
+                    console.log('🔁 ループ有効化: 継続時間', value, '> 元の長さ', originalDuration);
+                }
+            }
+        }
+        else {
             this.selectedClip[property] = value;
         }
         
@@ -2903,12 +3125,42 @@ class StarlitTimelineApp {
         // 各ピンを描画
         for (const pin of clip.puppet.pins) {
             const pinPos = this.getPuppetPinPosition(pin, localTime);
-            const pinX = w * pinPos.x;
-            const pinY = h * pinPos.y;
             
-            // アンカーポイント基準の座標
-            const offsetX = pinX - w * anchor.x;
-            const offsetY = pinY - h * anchor.y;
+            // ピンの元の位置(中心基準)
+            let pinX = (pin.x - 0.5) * w;
+            let pinY = (pin.y - 0.5) * h;
+            
+            // 他のピンの影響を適用して、変形後の位置を計算
+            const stiffness = clip.puppet.stiffness || 0.5;
+            for (const otherPin of clip.puppet.pins) {
+                const otherPinPos = this.getPuppetPinPosition(otherPin, localTime);
+                const otherPinOrigX = (otherPin.x - 0.5) * w;
+                const otherPinOrigY = (otherPin.y - 0.5) * h;
+                const otherPinCurrX = (otherPinPos.x - 0.5) * w;
+                const otherPinCurrY = (otherPinPos.y - 0.5) * h;
+                
+                const dx = otherPinCurrX - otherPinOrigX;
+                const dy = otherPinCurrY - otherPinOrigY;
+                
+                const distX = pinX - otherPinOrigX;
+                const distY = pinY - otherPinOrigY;
+                const dist = Math.sqrt(distX * distX + distY * distY);
+                
+                // 影響範囲を計算（stiffnessが高いほど影響範囲が広い）
+                const baseRadius = Math.max(w, h) * 0.3; // ベース影響範囲
+                const influenceRadius = baseRadius * (0.5 + stiffness * 1.5); // 0.5-2.0倍の範囲
+                
+                // 影響力を計算（距離に応じて指数減衰、stiffnessで減衰の強さを調整）
+                const falloff = 2.0 - stiffness * 1.5; // falloff: 0.5-2.0（小さいほど遠くまで影響）
+                const influence = Math.exp(-dist * falloff / influenceRadius);
+                
+                pinX += dx * influence;
+                pinY += dy * influence;
+            }
+            
+            // 中心基準からアンカーポイント基準に変換
+            const offsetX = pinX;
+            const offsetY = pinY;
             
             // 回転を適用
             const rotatedX = offsetX * cos - offsetY * sin;
@@ -3151,9 +3403,6 @@ class StarlitTimelineApp {
     playAudioClip(clip, localTime) {
         if (!clip.audioElement) return;
         
-        // trimStartを考慮した実際の再生位置を計算
-        const actualTime = localTime + (clip.trimStart || 0);
-        
         // クリップのdurationを超えている場合は停止
         if (localTime >= clip.duration || localTime < 0) {
             if (!clip.audioElement.paused) {
@@ -3162,11 +3411,24 @@ class StarlitTimelineApp {
             return;
         }
         
+        // trimStartを考慮した実際の再生位置を計算
+        const trimStart = clip.trimStart || clip.offset || 0;
+        const originalDuration = clip.originalDuration || clip.duration;
+        const loopEnabled = clip.loopEnabled || false;
+        
+        let actualTime = trimStart + localTime;
+        
+        // ループ対応：元の長さを超えたら繰り返し
+        if (loopEnabled && actualTime >= originalDuration) {
+            const loopDuration = originalDuration - trimStart;
+            actualTime = trimStart + (localTime % loopDuration);
+        }
+        
         // パンとボリュームをキーフレームから取得
         const pan = this.getKeyframeValue(clip, 'pan', localTime);
         const volume = clip.volume || 1.0;
         
-        console.log('🎵 Playing audio - localTime:', localTime.toFixed(2), 'pan:', pan.toFixed(2), 'volume:', volume.toFixed(2));
+        console.log('🎵 Playing audio - localTime:', localTime.toFixed(2), 'actualTime:', actualTime.toFixed(2), 'pan:', pan.toFixed(2), 'volume:', volume.toFixed(2));
         
         // Web Audio APIノードに値を設定
         if (clip.gainNode) {
@@ -5628,6 +5890,14 @@ class StarlitTimelineApp {
                 const dist = Math.sqrt(Math.pow(mouseX - screenX, 2) + Math.pow(mouseY - screenY, 2));
                 
                 if (dist < 32) { // ピンのクリック判定（少し広く）
+                    // 右クリックの場合はピンを削除
+                    if (e.button === 2) {
+                        e.preventDefault();
+                        this.removePuppetPin(pin.id);
+                        return;
+                    }
+                    
+                    // 左クリックの場合はドラッグ開始
                     this.isDraggingPuppetPin = true;
                     this.draggingPinId = pin.id;
                     this.previewCanvas.style.cursor = 'move';
@@ -6933,16 +7203,27 @@ class StarlitTimelineApp {
         
         // ワールド座標をWebGL座標に変換
         const glPositions = [];
+        let minGlX = Infinity, maxGlX = -Infinity;
+        let minGlY = Infinity, maxGlY = -Infinity;
+        
         for (let i = 0; i < mesh.worldPositions.length; i += 2) {
             const x = mesh.worldPositions[i];
             const y = mesh.worldPositions[i + 1];
             
             // キャンバス中心を原点として、WebGL座標系に変換
             const glX = (x / canvasWidth) * 2;
-            const glY = -(y / canvasHeight) * 2 + 1;
+            const glY = -(y / canvasHeight) * 2;  // +1を削除
+            
+            minGlX = Math.min(minGlX, glX);
+            maxGlX = Math.max(maxGlX, glX);
+            minGlY = Math.min(minGlY, glY);
+            maxGlY = Math.max(maxGlY, glY);
             
             glPositions.push(glX, glY);
         }
+        
+        console.log('  WebGL座標範囲: X[' + minGlX.toFixed(3) + ' ~ ' + maxGlX.toFixed(3) + 
+                    '], Y[' + minGlY.toFixed(3) + ' ~ ' + maxGlY.toFixed(3) + ']');
         
         // 位置バッファ
         const positionBuffer = gl.createBuffer();
@@ -7441,14 +7722,22 @@ class StarlitTimelineApp {
     
     // パペットピンを削除
     removePuppetPin(pinId) {
-        if (!this.selectedClip || !this.selectedClip.puppet) return;
+        console.log('🗑️ removePuppetPin呼び出し:', pinId);
+        if (!this.selectedClip || !this.selectedClip.puppet) {
+            console.log('⚠️ selectedClipまたはpuppetがありません');
+            return;
+        }
         
         const index = this.selectedClip.puppet.pins.findIndex(p => p.id === pinId);
+        console.log('📍 ピンのインデックス:', index);
         if (index !== -1) {
             this.selectedClip.puppet.pins.splice(index, 1);
+            console.log('✅ ピンを削除しました。残りのピン数:', this.selectedClip.puppet.pins.length);
             this.updatePuppetUI();
             this.updatePreview();
             this.saveHistory();
+        } else {
+            console.log('⚠️ ピンが見つかりませんでした');
         }
     }
     
@@ -7518,18 +7807,16 @@ class StarlitTimelineApp {
             return;
         }
         
-        console.log('  → パペット変形描画を実行(ctxの変形状態をそのまま使用)');
+        console.log('  → パペット変形描画を実行(風揺れと同じ方式)');
         
-        // 既に ctx.translate/rotate/scale が適用されている状態で
-        // 中心基準(-w/2, -h/2)で描画すればOK
-        this.applyPuppetWebGL(ctx, img, w, h, clip, time, x, y);
+        // 風揺れと同じくWebGL版を呼ぶ（anchorは無視される）
+        this.applyPuppetWebGL(ctx, img, w, h, clip, time);
     }
     
-    // パペット用WebGL描画
-    applyPuppetWebGL(ctx, img, width, height, clip, time, offsetX, offsetY) {
+    // パペット用WebGL描画（風揺れと完全に同じ構造）
+    applyPuppetWebGL(ctx, img, width, height, clip, time) {
         console.log('🎨 applyPuppetWebGL called');
         console.log('  width=' + width + ', height=' + height);
-        console.log('  offsetX=' + offsetX + ', offsetY=' + offsetY);
         
         // 風揺れと同じWebGLコンテキストを使用
         if (!this.windShakeCanvas) {
@@ -7544,54 +7831,41 @@ class StarlitTimelineApp {
         const gl = this.windShakeGL;
         const canvas = this.windShakeCanvas;
         
-        // パペット変形後のバウンディングボックスを計算
-        const bounds = this.getPuppetDeformedBounds(clip, width, height);
-        const expandedWidth = bounds.maxX - bounds.minX;
-        const expandedHeight = bounds.maxY - bounds.minY;
+        // メッシュを生成してバウンディングボックスを取得
+        const meshData = this.createPuppetMeshWithBounds(clip.puppet, width, height, time);
         
-        // 変形による中心のオフセット
-        const centerOffsetX = (bounds.minX + bounds.maxX) / 2 - width / 2;
-        const centerOffsetY = (bounds.minY + bounds.maxY) / 2 - height / 2;
+        // バウンディングボックスのサイズを計算
+        // パペットは変形に応じて動的に拡張するため、padding不要
+        const padding = 0;
+        const canvasWidth = meshData.bounds.width + padding * 2;
+        const canvasHeight = meshData.bounds.height + padding * 2;
         
-        console.log('  変形後の範囲: ' + expandedWidth + 'x' + expandedHeight);
-        console.log('  中心オフセット: (' + centerOffsetX + ', ' + centerOffsetY + ')');
+        console.log('  バウンディング: ' + meshData.bounds.width.toFixed(1) + 'x' + meshData.bounds.height.toFixed(1));
+        console.log('  bounds.centerX: ' + meshData.bounds.centerX.toFixed(1) + ', centerY: ' + meshData.bounds.centerY.toFixed(1));
+        console.log('  bounds.minX: ' + meshData.bounds.minX.toFixed(1) + ', minY: ' + meshData.bounds.minY.toFixed(1));
+        console.log('  bounds.maxX: ' + meshData.bounds.maxX.toFixed(1) + ', maxY: ' + meshData.bounds.maxY.toFixed(1));
+        console.log('  拡張後キャンバス: ' + canvasWidth + 'x' + canvasHeight);
         
-        // メッシュを生成（元のサイズで生成）
-        const meshData = this.createPuppetMesh(clip.puppet, width, height, time);
+        // キャンバスサイズを設定
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
+        gl.viewport(0, 0, canvasWidth, canvasHeight);
         
-        // キャンバスサイズを拡張した範囲に設定
-        canvas.width = Math.ceil(expandedWidth);
-        canvas.height = Math.ceil(expandedHeight);
-        gl.viewport(0, 0, canvas.width, canvas.height);
+        // WebGLで描画（メッシュはそのまま使用）
+        this.renderWindShakeWebGL(gl, img, meshData.mesh, canvasWidth, canvasHeight);
         
-        // メッシュの頂点座標をオフセット（変形後の範囲がキャンバスの中心になるように）
-        const offsetMeshData = {
-            worldPositions: [],
-            texCoords: meshData.texCoords,
-            indices: meshData.indices
-        };
+        // 描画位置を計算 - 拡張キャンバス全体を中心に配置
+        const drawX = -canvasWidth / 2;
+        const drawY = -canvasHeight / 2;
         
-        for (let i = 0; i < meshData.worldPositions.length; i += 2) {
-            offsetMeshData.worldPositions.push(
-                meshData.worldPositions[i] - bounds.minX,
-                meshData.worldPositions[i + 1] - bounds.minY
-            );
-        }
-        
-        // WebGLで描画
-        this.renderWindShakeWebGL(gl, img, offsetMeshData, canvas.width, canvas.height);
-        
-        // 描画位置を計算（アンカーポイントと中心オフセットを考慮）
-        const drawX = offsetX + centerOffsetX;
-        const drawY = offsetY + centerOffsetY;
-        
-        console.log('  → メインキャンバスに転送: (' + drawX + ', ' + drawY + ')');
         // 結果をメインキャンバスに描画
-        ctx.drawImage(canvas, drawX, drawY, canvas.width, canvas.height);
+        console.log('  → メインキャンバスに転送: (' + drawX.toFixed(1) + ', ' + drawY.toFixed(1) + ')');
+        ctx.drawImage(canvas, drawX, drawY, canvasWidth, canvasHeight);
     }
     
-    // パペット用メッシュ生成（風揺れと同じ形式）
-    createPuppetMesh(puppet, width, height, time) {
+    
+    // パペット用メッシュ生成（風揺れと同じ形式でバウンディングボックスも返す）
+    createPuppetMeshWithBounds(puppet, width, height, time) {
         const density = puppet.gridDensity || 20;
         const stiffness = puppet.stiffness || 0.5;
         
@@ -7602,56 +7876,62 @@ class StarlitTimelineApp {
         const texCoords = [];
         const indices = [];
         
-        // グリッド頂点を生成
-        const gridX = [];
-        const gridY = [];
+        let minX = Infinity, maxX = -Infinity;
+        let minY = Infinity, maxY = -Infinity;
         
+        // グリッド頂点を生成（風揺れと同じく中心基準）
         for (let i = 0; i <= N; i++) {
-            gridX[i] = [];
-            gridY[i] = [];
             for (let j = 0; j <= M; j++) {
                 const u = j / M;
                 const v = i / N;
                 
-                let px = u * width;
-                let py = v * height;
+                // 風揺れと同じく中心基準で座標を計算
+                let px = (u - 0.5) * width;
+                let py = (v - 0.5) * height;
                 
                 // ピンの影響を適用
                 for (const pin of puppet.pins) {
                     const pinPos = this.getPuppetPinPosition(pin, time);
-                    const pinOrigX = pin.x * width;
-                    const pinOrigY = pin.y * height;
-                    const pinCurrX = pinPos.x * width;
-                    const pinCurrY = pinPos.y * height;
+                    const pinOrigX = (pin.x - 0.5) * width;
+                    const pinOrigY = (pin.y - 0.5) * height;
+                    const pinCurrX = (pinPos.x - 0.5) * width;
+                    const pinCurrY = (pinPos.y - 0.5) * height;
                     
                     const dx = pinCurrX - pinOrigX;
                     const dy = pinCurrY - pinOrigY;
+                    
+                    // デバッグログ（最初のグリッド点のみ）
+                    if (i === 0 && j === 0) {
+                        console.log('  🔍 ピン影響計算:');
+                        console.log('    pin.x=' + pin.x.toFixed(3) + ', pin.y=' + pin.y.toFixed(3));
+                        console.log('    pinPos.x=' + pinPos.x.toFixed(3) + ', pinPos.y=' + pinPos.y.toFixed(3));
+                        console.log('    dx=' + dx.toFixed(2) + ', dy=' + dy.toFixed(2));
+                    }
                     
                     const distX = px - pinOrigX;
                     const distY = py - pinOrigY;
                     const dist = Math.sqrt(distX * distX + distY * distY);
                     
-                    // 影響度計算
-                    const influenceRadius = Math.max(width, height) * stiffness;
-                    const influence = Math.exp(-dist / influenceRadius);
+                    // 影響範囲を計算（stiffnessが高いほど影響範囲が広い）
+                    const baseRadius = Math.max(width, height) * 0.3; // ベース影響範囲
+                    const influenceRadius = baseRadius * (0.5 + stiffness * 1.5); // 0.5-2.0倍の範囲
+                    
+                    // 影響力を計算（距離に応じて指数減衰、stiffnessで減衰の強さを調整）
+                    const falloff = 2.0 - stiffness * 1.5; // falloff: 0.5-2.0（小さいほど遠くまで影響）
+                    const influence = Math.exp(-dist * falloff / influenceRadius);
                     
                     px += dx * influence;
                     py += dy * influence;
                 }
                 
-                gridX[i][j] = px;
-                gridY[i][j] = py;
-            }
-        }
-        
-        // 頂点データとインデックスを生成（風揺れと同じ形式）
-        for (let i = 0; i <= N; i++) {
-            for (let j = 0; j <= M; j++) {
-                const u = j / M;
-                const v = i / N;
+                // バウンディングボックス更新
+                minX = Math.min(minX, px);
+                maxX = Math.max(maxX, px);
+                minY = Math.min(minY, py);
+                maxY = Math.max(maxY, py);
                 
                 // ワールド座標を保存（風揺れと同じ形式）
-                worldPositions.push(gridX[i][j], gridY[i][j]);
+                worldPositions.push(px, py);
                 texCoords.push(u, v);
             }
         }
@@ -7670,68 +7950,25 @@ class StarlitTimelineApp {
             }
         }
         
-        return { worldPositions, texCoords, indices };
+        // バウンディングボックス情報（風揺れと同じ形式）
+        const bounds = {
+            minX: minX,
+            maxX: maxX,
+            minY: minY,
+            maxY: maxY,
+            width: maxX - minX,
+            height: maxY - minY,
+            centerX: (maxX + minX) / 2,
+            centerY: (maxY + minY) / 2
+        };
+        
+        return { 
+            mesh: { worldPositions, texCoords, indices },
+            bounds: bounds
+        };
     }
     
     // パペット変形後の実際のバウンディングボックスを計算
-    getPuppetDeformedBounds(clip, originalWidth, originalHeight) {
-        if (!clip.puppet || !clip.puppet.enabled || clip.puppet.pins.length === 0) {
-            return { minX: 0, minY: 0, maxX: originalWidth, maxY: originalHeight };
-        }
-        
-        const localTime = this.currentTime - clip.startTime;
-        const density = clip.puppet.gridDensity || 20;
-        const stiffness = clip.puppet.stiffness || 0.5;
-        
-        const M = Math.max(4, Math.floor(originalWidth / density));
-        const N = Math.max(4, Math.floor(originalHeight / density));
-        
-        let minX = Infinity;
-        let minY = Infinity;
-        let maxX = -Infinity;
-        let maxY = -Infinity;
-        
-        // 全頂点を走査して変形後の範囲を計算
-        for (let i = 0; i <= N; i++) {
-            for (let j = 0; j <= M; j++) {
-                const u = j / M;
-                const v = i / N;
-                
-                let px = u * originalWidth;
-                let py = v * originalHeight;
-                
-                // ピンの影響を適用
-                for (const pin of clip.puppet.pins) {
-                    const pinPos = this.getPuppetPinPosition(pin, localTime);
-                    const pinOrigX = pin.x * originalWidth;
-                    const pinOrigY = pin.y * originalHeight;
-                    const pinCurrX = pinPos.x * originalWidth;
-                    const pinCurrY = pinPos.y * originalHeight;
-                    
-                    const dx = pinCurrX - pinOrigX;
-                    const dy = pinCurrY - pinOrigY;
-                    
-                    const distX = px - pinOrigX;
-                    const distY = py - pinOrigY;
-                    const dist = Math.sqrt(distX * distX + distY * distY);
-                    
-                    const influenceRadius = Math.max(originalWidth, originalHeight) * stiffness;
-                    const influence = Math.exp(-dist / influenceRadius);
-                    
-                    px += dx * influence;
-                    py += dy * influence;
-                }
-                
-                // 最小・最大値を更新
-                minX = Math.min(minX, px);
-                minY = Math.min(minY, py);
-                maxX = Math.max(maxX, px);
-                maxY = Math.max(maxY, py);
-            }
-        }
-        
-        return { minX, minY, maxX, maxY };
-    }
     
     // ==================== アンカーポイント機能 ====================
     
@@ -7829,10 +8066,21 @@ class StarlitTimelineApp {
             this.selectedClip.puppet.pins.forEach((pin, index) => {
                 const pinItem = document.createElement('div');
                 pinItem.className = 'puppet-pin-item';
-                pinItem.innerHTML = `
-                    <span>ピン ${index + 1} (${(pin.x * 100).toFixed(0)}%, ${(pin.y * 100).toFixed(0)}%)</span>
-                    <button onclick="app.removePuppetPin('${pin.id}')">削除</button>
-                `;
+                pinItem.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 8px; margin: 4px 0; background: rgba(255,255,255,0.1); border-radius: 4px;';
+                
+                const pinInfo = document.createElement('span');
+                pinInfo.textContent = `ピン ${index + 1} (${(pin.x * 100).toFixed(0)}%, ${(pin.y * 100).toFixed(0)}%)`;
+                
+                const deleteBtn = document.createElement('button');
+                deleteBtn.textContent = '削除';
+                deleteBtn.style.cssText = 'padding: 4px 12px; background: #8B4513; color: white; border: none; border-radius: 4px; cursor: pointer;';
+                deleteBtn.addEventListener('click', () => {
+                    console.log('🗑️ 削除ボタンがクリックされました:', pin.id);
+                    this.removePuppetPin(pin.id);
+                });
+                
+                pinItem.appendChild(pinInfo);
+                pinItem.appendChild(deleteBtn);
                 pinsList.appendChild(pinItem);
             });
         }
