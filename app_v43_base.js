@@ -1196,10 +1196,8 @@ class StarlitTimelineApp {
             const canvasRect = this.timelineCanvas.getBoundingClientRect();
             const scrollContainer = document.getElementById('timelineScroll');
             
-            // キャンバス内の相対座標を計算
-            // getBoundingClientRect()は既にスクロールを考慮しているので、scrollTopは足さない
-            const x = (event.clientX - canvasRect.left) + scrollContainer.scrollLeft;
-            const y = event.clientY - canvasRect.top;
+            const x = event.clientX - canvasRect.left + scrollContainer.scrollLeft;
+            const y = event.clientY - canvasRect.top + scrollContainer.scrollTop;
             
             const time = x / this.zoom;
             const track = Math.floor(y / this.trackHeight);
@@ -1212,14 +1210,14 @@ class StarlitTimelineApp {
         const asset = this.assets.find(a => a.id == assetId);
         if (!asset) return;
         
-        const defaultDuration = 5; // 画像のデフォルト5秒
+        const defaultDuration = 5; // デフォルト5秒
         
         const clip = {
             id: Date.now() + Math.random(),
             asset: asset,
             track: Math.max(0, Math.min(track, this.trackCount - 1)),
             startTime: Math.max(0, startTime),
-            duration: defaultDuration, // 後で更新される場合がある
+            duration: defaultDuration,
             originalDuration: defaultDuration, // 元の長さを保存
             offset: 0, // オフセット（トリミング用）
             volume: 1.0, // 音量 (0.0 - 1.0)
@@ -1296,10 +1294,6 @@ class StarlitTimelineApp {
         if (asset.type === 'sequence') {
             clip.currentFrame = 0;
             clip.frameRate = 30; // デフォルト30fps
-            // 連番の長さを計算
-            const sequenceDuration = asset.frameCount / clip.frameRate;
-            clip.duration = sequenceDuration;
-            clip.originalDuration = sequenceDuration;
         }
         
         // 音声素材または動画素材の場合、AudioElementを準備
@@ -1310,28 +1304,6 @@ class StarlitTimelineApp {
         // 画像・動画の場合、原寸情報を取得
         if (asset.type === 'image' || asset.type === 'video') {
             this.loadAssetDimensions(clip);
-        }
-        
-        // 動画の場合、実際の長さを取得
-        if (asset.type === 'video') {
-            const video = document.createElement('video');
-            video.onloadedmetadata = () => {
-                clip.duration = video.duration;
-                clip.originalDuration = video.duration;
-                this.drawTimeline();
-            };
-            video.src = asset.url;
-        }
-        
-        // 音声の場合、実際の長さを取得
-        if (asset.type === 'audio') {
-            const audio = new Audio();
-            audio.onloadedmetadata = () => {
-                clip.duration = audio.duration;
-                clip.originalDuration = audio.duration;
-                this.drawTimeline();
-            };
-            audio.src = asset.url;
         }
         
         this.clips.push(clip);
@@ -1608,7 +1580,7 @@ class StarlitTimelineApp {
         ctx.lineTo(x, this.timelineCanvas.height);
         ctx.stroke();
         
-        // プレイヘッドトップ(くま画像) - タイムラインキャンバスに描画
+        // プレイヘッドトップ(くま画像) - 位置を下にずらしてルーラーの下に表示
         const bearSize = 36;
         if (this.seekbarImage && this.seekbarImage.complete) {
             ctx.drawImage(
@@ -1681,6 +1653,8 @@ class StarlitTimelineApp {
             const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
             ctx.fillText(timeStr, x + 2, height - 12);
         }
+        
+        // くまはタイムラインキャンバス側に描画するのでここでは描画しない
     }
     
     // タイムライン操作
@@ -1688,8 +1662,8 @@ class StarlitTimelineApp {
         const rect = this.timelineCanvas.getBoundingClientRect();
         const scrollContainer = document.getElementById('timelineScroll');
         
-        const x = (e.clientX - rect.left) + scrollContainer.scrollLeft;
-        const y = e.clientY - rect.top;
+        const x = e.clientX - rect.left + scrollContainer.scrollLeft;
+        const y = e.clientY - rect.top + scrollContainer.scrollTop;
         
         // プレイヘッド(くま)のクリック判定(上部40pxの範囲)
         const playheadX = this.currentTime * this.zoom;
@@ -1786,7 +1760,7 @@ class StarlitTimelineApp {
         if (this.isDraggingKeyframe && this.draggingKeyframe) {
             const rect = this.timelineCanvas.getBoundingClientRect();
             const scrollContainer = document.getElementById('timelineScroll');
-            const x = (e.clientX - rect.left) + scrollContainer.scrollLeft;
+            const x = e.clientX - rect.left + scrollContainer.scrollLeft;
             
             const deltaX = x - this.dragStartX;
             const newTime = this.draggingKeyframe.keyframe.time + (deltaX / this.zoom);
@@ -1811,8 +1785,8 @@ class StarlitTimelineApp {
         const rect = this.timelineCanvas.getBoundingClientRect();
         const scrollContainer = document.getElementById('timelineScroll');
         
-        const x = (e.clientX - rect.left) + scrollContainer.scrollLeft;
-        const y = e.clientY - rect.top;
+        const x = e.clientX - rect.left + scrollContainer.scrollLeft;
+        const y = e.clientY - rect.top + scrollContainer.scrollTop;
         
         // ドラッグ開始位置からの差分を計算
         const deltaX = x - this.dragStartX;
@@ -1927,9 +1901,14 @@ class StarlitTimelineApp {
     
     // オートトリミング機能
     autoTrimCollisions(movedClip) {
+        console.log('=== オートトリミング開始 ===');
+        
         // 移動したクリップの範囲を計算
         const movedStart = movedClip.startTime;
         const movedEnd = movedClip.startTime + movedClip.duration - movedClip.offset;
+        
+        console.log(`移動クリップ: ${movedClip.asset.name}`);
+        console.log(`移動クリップ範囲: ${movedStart.toFixed(2)}秒 ～ ${movedEnd.toFixed(2)}秒`);
         
         // 同じトラックの他のクリップをチェック
         for (let otherClip of this.clips) {
@@ -1943,9 +1922,12 @@ class StarlitTimelineApp {
             const otherStart = otherClip.startTime;
             const otherEnd = otherClip.startTime + otherClip.duration - otherClip.offset;
             
+            console.log(`チェック中: ${otherClip.asset.name} (${otherStart.toFixed(2)}秒 ～ ${otherEnd.toFixed(2)}秒)`);
+            
             // パターン1: 移動クリップが左から押す（他のクリップの頭をトリミング）
             if (movedEnd > otherStart && movedEnd < otherEnd && movedStart < otherStart) {
                 const overlap = movedEnd - otherStart;
+                console.log(`前方衝突: ${otherClip.asset.name} の頭を ${overlap.toFixed(2)}秒 トリミング`);
                 
                 // 他のクリップの頭をカット
                 otherClip.offset += overlap;
@@ -1962,6 +1944,7 @@ class StarlitTimelineApp {
             // パターン2: 移動クリップが右から押す（他のクリップの後ろをトリミング）
             else if (movedStart < otherEnd && movedStart > otherStart && movedEnd > otherEnd) {
                 const overlap = otherEnd - movedStart;
+                console.log(`後方衝突: ${otherClip.asset.name} の後ろを ${overlap.toFixed(2)}秒 トリミング`);
                 
                 // 他のクリップの後ろをカット
                 const visibleDuration = otherClip.duration - otherClip.offset;
@@ -1977,6 +1960,8 @@ class StarlitTimelineApp {
             
             // パターン3: 移動クリップが完全に覆う（他のクリップを後方へ移動）
             else if (movedStart <= otherStart && movedEnd >= otherEnd) {
+                console.log(`完全衝突: ${otherClip.asset.name} が完全に覆われました`);
+                
                 // 他のクリップを後方へ移動
                 otherClip.startTime = movedEnd;
                 otherClip.offset = 0; // オフセットをリセット
@@ -1986,6 +1971,8 @@ class StarlitTimelineApp {
         // タイムラインを再描画
         this.drawTimeline();
         this.updatePropertiesPanel();
+        
+        console.log('=== オートトリミング完了 ===');
     }
     
     // プロパティパネル
@@ -3267,16 +3254,25 @@ class StarlitTimelineApp {
         const anchorX = -drawWidth * anchor.x;
         const anchorY = -drawHeight * anchor.y;
         
+        console.log('📐 描画位置情報:');
+        console.log('  drawWidth=' + drawWidth + ', drawHeight=' + drawHeight);
+        console.log('  anchor=(' + anchor.x + ', ' + anchor.y + ')');
+        console.log('  anchorX=' + anchorX + ', anchorY=' + anchorY);
+        
         // パペット変形が有効な場合
         if (clip.puppet && clip.puppet.enabled && clip.puppet.pins.length > 0) {
+            console.log('  分岐: パペット変形');
             const localTime = this.currentTime - clip.startTime;
             this.drawPuppetDeformedImage(ctx, clip, img, anchorX, anchorY, drawWidth, drawHeight, localTime);
         }
         // 風揺れエフェクトが有効な場合
         else if (clip.windShake && clip.windShake.enabled) {
+            console.log('  分岐: 風揺れエフェクト');
             const localTime = this.currentTime - clip.startTime;
             this.applyWindShakeToImage(ctx, img, drawWidth, drawHeight, clip, localTime, anchorX, anchorY);
         } else {
+            console.log('  分岐: 通常描画');
+            console.log('  ctx.drawImage(img, ' + anchorX + ', ' + anchorY + ', ' + drawWidth + ', ' + drawHeight + ')');
             ctx.drawImage(img, anchorX, anchorY, drawWidth, drawHeight);
         }
         
@@ -4330,16 +4326,6 @@ class StarlitTimelineApp {
             cancelAnimationFrame(this.playbackAnimationFrame);
             this.playbackAnimationFrame = null;
         }
-        
-        // すべての音声と動画を一時停止
-        this.clips.forEach(clip => {
-            if (clip.audioElement && !clip.audioElement.paused) {
-                clip.audioElement.pause();
-            }
-            if (clip.videoElement && !clip.videoElement.paused) {
-                clip.videoElement.pause();
-            }
-        });
     }
     
     stop() {
@@ -4364,10 +4350,6 @@ class StarlitTimelineApp {
         this.inPoint = this.currentTime;
         this.drawTimeline();
         this.drawRuler();
-        
-        // 書き出し開始時間を更新
-        document.getElementById('exportStart').value = this.inPoint.toFixed(2);
-        
         this.showNotification(`📍 インポイント設定: ${this.formatTime(this.inPoint)}`);
     }
     
@@ -4377,12 +4359,6 @@ class StarlitTimelineApp {
         if (this.inPoint !== null && this.outPoint < this.inPoint) {
             // アウトポイントがインポイントより前の場合は入れ替え
             [this.inPoint, this.outPoint] = [this.outPoint, this.inPoint];
-            // 入れ替えた場合は両方の値を更新
-            document.getElementById('exportStart').value = this.inPoint.toFixed(2);
-            document.getElementById('exportEnd').value = this.outPoint.toFixed(2);
-        } else {
-            // 書き出し終了時間を更新
-            document.getElementById('exportEnd').value = this.outPoint.toFixed(2);
         }
         this.drawTimeline();
         this.drawRuler();
@@ -4395,12 +4371,6 @@ class StarlitTimelineApp {
         this.outPoint = null;
         this.drawTimeline();
         this.drawRuler();
-        
-        // 書き出し範囲をデフォルト値にリセット
-        document.getElementById('exportStart').value = '0';
-        const projectDuration = Math.max(...this.clips.map(c => c.startTime + c.duration), this.duration);
-        document.getElementById('exportEnd').value = projectDuration.toFixed(2);
-        
         this.showNotification('❌ ループ範囲をクリアしました');
     }
     
@@ -4442,7 +4412,6 @@ class StarlitTimelineApp {
         document.getElementById('trackCount').textContent = this.trackCount;
         this.updateTimelineSize();
         this.drawTimeline();
-        this.drawRuler();
     }
     
     decreaseTrackCount() {
@@ -4451,7 +4420,6 @@ class StarlitTimelineApp {
             document.getElementById('trackCount').textContent = this.trackCount;
             this.updateTimelineSize();
             this.drawTimeline();
-            this.drawRuler();
         }
     }
     
@@ -4984,42 +4952,20 @@ class StarlitTimelineApp {
         // クリップをクリア
         this.clips = [];
         
-        console.log('📦 プロジェクトからクリップを復元中...', project.clips.length, 'クリップ');
-        console.log('📁 利用可能な素材:', this.assets.map(a => a.name));
-        
         // クリップを復元
         for (const clipData of project.clips) {
             // 素材を名前で検索
             const asset = this.assets.find(a => a.name === clipData.asset.name);
             
             if (!asset) {
-                console.warn(`❌ 素材が見つかりません: ${clipData.asset.name}`);
+                console.warn(`素材が見つかりません: ${clipData.asset.name}`);
                 continue;
             }
             
-            console.log(`✅ 素材を発見: ${asset.name}, type: ${asset.type}, url: ${asset.url ? '有' : '無'}`);
-            
-            // クリップを復元（assetは完全に置き換え）
+            // クリップを復元
             const clip = {
-                id: clipData.id,
-                track: clipData.track,
-                startTime: clipData.startTime,
-                duration: clipData.duration,
-                inPoint: clipData.inPoint,
-                x: clipData.x,
-                y: clipData.y,
-                scale: clipData.scale,
-                rotation: clipData.rotation,
-                opacity: clipData.opacity,
-                volume: clipData.volume,
-                pan: clipData.pan !== undefined ? clipData.pan : 0,
-                blendMode: clipData.blendMode || 'normal',
-                anchorPoint: clipData.anchorPoint || { x: 0.5, y: 0.5 },
-                keyframes: clipData.keyframes,
-                clipEffects: clipData.clipEffects || {},
-                transitionIn: clipData.transitionIn || null,
-                transitionOut: clipData.transitionOut || null,
-                asset: asset  // 新しく読み込んだassetオブジェクトを使用
+                ...clipData,
+                asset: asset
             };
             
             // 古いプロジェクトとの互換性：panが無い場合はデフォルト値を設定
@@ -5030,16 +4976,18 @@ class StarlitTimelineApp {
                 clip.keyframes.pan = [{time: 0, value: 0}];
             }
             
+            // 古いプロジェクトとの互換性：blendModeが無い場合はデフォルト値を設定
+            if (!clip.blendMode) {
+                clip.blendMode = 'normal';
+            }
+            
             // 音声素材または動画素材の場合、AudioElementを準備
             if (asset.type === 'audio' || asset.type === 'video') {
                 this.prepareAudioClip(clip);
             }
             
             this.clips.push(clip);
-            console.log(`✅ クリップを復元: ${clip.asset.name}, asset.url: ${clip.asset.url}`);
         }
-        
-        console.log('✅ クリップ復元完了:', this.clips.length, 'クリップ');
         
         this.drawTimeline();
         this.updatePreview();
@@ -6204,15 +6152,8 @@ class StarlitTimelineApp {
     }
     
     async exportWebM() {
-        // In/Outポイントが設定されている場合はそれを使用
-        let startTime, endTime;
-        if (this.inPoint !== null && this.outPoint !== null) {
-            startTime = Math.min(this.inPoint, this.outPoint);
-            endTime = Math.max(this.inPoint, this.outPoint);
-        } else {
-            startTime = parseFloat(document.getElementById('exportStart').value);
-            endTime = parseFloat(document.getElementById('exportEnd').value);
-        }
+        const startTime = parseFloat(document.getElementById('exportStart').value);
+        const endTime = parseFloat(document.getElementById('exportEnd').value);
         
         if (startTime >= endTime) {
             alert('書き出し範囲が不正です');
@@ -6222,11 +6163,7 @@ class StarlitTimelineApp {
         const duration = endTime - startTime;
         const frames = Math.ceil(duration * this.fps);
         
-        const rangeInfo = (this.inPoint !== null && this.outPoint !== null) 
-            ? '\n範囲: In/Outポイント' 
-            : '';
-        
-        if (!confirm(`WebM動画を書き出しますか?\n\n長さ: ${duration.toFixed(2)}秒\nフレーム数: ${frames}\nFPS: ${this.fps}${rangeInfo}\n\n※WebMは透過（アルファチャンネル）に対応しています`)) {
+        if (!confirm(`WebM動画を書き出しますか?\n\n長さ: ${duration.toFixed(2)}秒\nフレーム数: ${frames}\nFPS: ${this.fps}\n\n※WebMは透過（アルファチャンネル）に対応しています`)) {
             return;
         }
         
@@ -6364,15 +6301,8 @@ class StarlitTimelineApp {
     }
     
     async exportSequence() {
-        // In/Outポイントが設定されている場合はそれを使用
-        let startTime, endTime;
-        if (this.inPoint !== null && this.outPoint !== null) {
-            startTime = Math.min(this.inPoint, this.outPoint);
-            endTime = Math.max(this.inPoint, this.outPoint);
-        } else {
-            startTime = parseFloat(document.getElementById('exportStart').value);
-            endTime = parseFloat(document.getElementById('exportEnd').value);
-        }
+        const startTime = parseFloat(document.getElementById('exportStart').value);
+        const endTime = parseFloat(document.getElementById('exportEnd').value);
         
         if (startTime >= endTime) {
             alert('書き出し範囲が不正です');
@@ -6381,11 +6311,7 @@ class StarlitTimelineApp {
         
         const frames = Math.ceil((endTime - startTime) * this.fps);
         
-        const rangeInfo = (this.inPoint !== null && this.outPoint !== null) 
-            ? ' (In/Outポイント範囲)' 
-            : '';
-        
-        if (!confirm(`${frames}フレームを連番PNG (ZIP圧縮) で書き出しますか?${rangeInfo}`)) {
+        if (!confirm(`${frames}フレームを連番PNG (ZIP圧縮) で書き出しますか?`)) {
             return;
         }
         
@@ -6434,12 +6360,7 @@ class StarlitTimelineApp {
         
         for (let i = 0; i < frames; i++) {
             this.currentTime = startTime + (i / this.fps);
-            
-            // updatePreviewの完了を待つ（重要: 全クリップのレンダリングが完了してからキャプチャ）
-            await this.updatePreview();
-            
-            // さらに少し待ってレンダリングが確実に完了するようにする
-            await new Promise(resolve => setTimeout(resolve, 50));
+            this.updatePreview();
             
             // フレームを画像として取得
             const dataUrl = this.previewCanvas.toDataURL('image/png');
@@ -6458,7 +6379,7 @@ class StarlitTimelineApp {
         // 元の状態に戻す
         this.currentTime = originalTime;
         this.selectedClip = originalSelectedClip; // 選択状態を復元
-        await this.updatePreview();
+        this.updatePreview();
         
         // ZIP圧縮
         document.getElementById('sequenceProgress').textContent = 'ZIP圧縮中...';
@@ -6478,184 +6399,7 @@ class StarlitTimelineApp {
     }
     
     async exportAudio() {
-        // 音声クリップがあるか確認
-        const audioClips = this.clips.filter(clip => 
-            clip.asset.type === 'audio' || clip.asset.type === 'video'
-        );
-        
-        if (audioClips.length === 0) {
-            alert('音声クリップがありません');
-            return;
-        }
-        
-        // In/Outポイントが設定されている場合はそれを使用
-        let startTime, endTime;
-        if (this.inPoint !== null && this.outPoint !== null) {
-            startTime = Math.min(this.inPoint, this.outPoint);
-            endTime = Math.max(this.inPoint, this.outPoint);
-        } else {
-            // プロジェクトの長さを計算
-            startTime = 0;
-            endTime = Math.max(...this.clips.map(c => c.startTime + c.duration), this.duration);
-        }
-        
-        const duration = endTime - startTime;
-        const rangeInfo = (this.inPoint !== null && this.outPoint !== null) 
-            ? '\n範囲: In/Outポイント' 
-            : '';
-        
-        if (!confirm(`音声を書き出しますか？\n\n長さ: ${duration.toFixed(2)}秒\nサンプルレート: 48000Hz\nフォーマット: WAV (16bit)${rangeInfo}`)) {
-            return;
-        }
-        
-        try {
-            this.showNotification('🎵 音声を書き出し中...');
-            
-            // オフラインAudioContextを作成
-            const sampleRate = 48000;
-            const offlineCtx = new OfflineAudioContext(2, sampleRate * duration, sampleRate);
-            
-            // 各音声クリップを処理
-            for (const clip of audioClips) {
-                // 範囲外のクリップをスキップ
-                if (clip.startTime + clip.duration < startTime || clip.startTime > endTime) {
-                    continue;
-                }
-                
-                if (!clip.audioElement || !clip.audioElement.src) {
-                    console.warn('音声が読み込まれていません:', clip.asset.name);
-                    continue;
-                }
-                
-                try {
-                    // 音声データを取得
-                    const response = await fetch(clip.audioElement.src);
-                    const arrayBuffer = await response.arrayBuffer();
-                    const audioBuffer = await offlineCtx.decodeAudioData(arrayBuffer);
-                    
-                    // ソースを作成
-                    const source = offlineCtx.createBufferSource();
-                    source.buffer = audioBuffer;
-                    
-                    // ゲインノードを作成（音量調整）
-                    const gainNode = offlineCtx.createGain();
-                    gainNode.gain.value = clip.volume * this.masterGainNode.gain.value;
-                    
-                    // パンノードを作成（クリップ開始時点のパン値を使用）
-                    const panNode = offlineCtx.createStereoPanner();
-                    const initialPan = this.getKeyframeValue(clip, 'pan', 0);
-                    panNode.pan.value = initialPan;
-                    
-                    // 接続
-                    source.connect(gainNode);
-                    gainNode.connect(panNode);
-                    panNode.connect(offlineCtx.destination);
-                    
-                    // 書き出し範囲内でのクリップの開始時間を計算
-                    const clipStartInRange = Math.max(0, clip.startTime - startTime);
-                    const trimStart = clip.trimStart || clip.offset || 0;
-                    
-                    // クリップが範囲の開始前から始まっている場合、trimStartを調整
-                    const adjustedTrimStart = trimStart + Math.max(0, startTime - clip.startTime);
-                    
-                    // 書き出し範囲内での再生時間を計算
-                    const clipDuration = Math.min(
-                        clip.duration - Math.max(0, startTime - clip.startTime),
-                        endTime - Math.max(clip.startTime, startTime),
-                        audioBuffer.duration - adjustedTrimStart
-                    );
-                    
-                    if (clipDuration > 0) {
-                        source.start(clipStartInRange, adjustedTrimStart, clipDuration);
-                    }
-                    
-                } catch (err) {
-                    console.error('音声クリップの処理エラー:', clip.asset.name, err);
-                }
-            }
-            
-            // レンダリング
-            const renderedBuffer = await offlineCtx.startRendering();
-            
-            // WAVファイルに変換
-            const wavBlob = this.bufferToWave(renderedBuffer, renderedBuffer.length);
-            
-            // ダウンロード
-            const url = URL.createObjectURL(wavBlob);
-            const a = document.createElement('a');
-            a.href = url;
-            
-            const date = new Date();
-            const dateStr = date.toISOString().slice(0, 19).replace(/:/g, '-');
-            a.download = `starlit_audio_${dateStr}.wav`;
-            
-            a.click();
-            URL.revokeObjectURL(url);
-            
-            this.showNotification('✅ 音声を書き出しました！');
-            
-        } catch (err) {
-            alert('音声書き出しに失敗しました:\n' + err.message);
-            console.error('音声書き出しエラー:', err);
-        }
-    }
-    
-    // AudioBufferをWAVファイルに変換
-    bufferToWave(abuffer, len) {
-        const numOfChan = abuffer.numberOfChannels;
-        const length = len * numOfChan * 2 + 44;
-        const buffer = new ArrayBuffer(length);
-        const view = new DataView(buffer);
-        const channels = [];
-        let offset = 0;
-        let pos = 0;
-        
-        // WAVヘッダーを書き込む
-        const setUint16 = (data) => {
-            view.setUint16(pos, data, true);
-            pos += 2;
-        };
-        const setUint32 = (data) => {
-            view.setUint32(pos, data, true);
-            pos += 4;
-        };
-        
-        // RIFFヘッダー
-        setUint32(0x46464952); // "RIFF"
-        setUint32(length - 8); // ファイルサイズ - 8
-        setUint32(0x45564157); // "WAVE"
-        
-        // fmtチャンク
-        setUint32(0x20746d66); // "fmt "
-        setUint32(16); // チャンクサイズ
-        setUint16(1); // オーディオフォーマット (1 = PCM)
-        setUint16(numOfChan); // チャンネル数
-        setUint32(abuffer.sampleRate); // サンプルレート
-        setUint32(abuffer.sampleRate * 2 * numOfChan); // バイトレート
-        setUint16(numOfChan * 2); // ブロックアライン
-        setUint16(16); // ビット深度
-        
-        // dataチャンク
-        setUint32(0x61746164); // "data"
-        setUint32(length - pos - 4); // データサイズ
-        
-        // チャンネルデータを取得
-        for (let i = 0; i < abuffer.numberOfChannels; i++) {
-            channels.push(abuffer.getChannelData(i));
-        }
-        
-        // インターリーブしてPCMデータを書き込む
-        while (pos < length) {
-            for (let i = 0; i < numOfChan; i++) {
-                let sample = Math.max(-1, Math.min(1, channels[i][offset])); // クリッピング
-                sample = sample < 0 ? sample * 0x8000 : sample * 0x7FFF; // 16bitに変換
-                view.setInt16(pos, sample, true);
-                pos += 2;
-            }
-            offset++;
-        }
-        
-        return new Blob([buffer], { type: 'audio/wav' });
+        alert('音声書き出し機能は開発中です');
     }
     
     // ============================================================
@@ -7544,50 +7288,22 @@ class StarlitTimelineApp {
         const gl = this.windShakeGL;
         const canvas = this.windShakeCanvas;
         
-        // パペット変形後のバウンディングボックスを計算
-        const bounds = this.getPuppetDeformedBounds(clip, width, height);
-        const expandedWidth = bounds.maxX - bounds.minX;
-        const expandedHeight = bounds.maxY - bounds.minY;
-        
-        // 変形による中心のオフセット
-        const centerOffsetX = (bounds.minX + bounds.maxX) / 2 - width / 2;
-        const centerOffsetY = (bounds.minY + bounds.maxY) / 2 - height / 2;
-        
-        console.log('  変形後の範囲: ' + expandedWidth + 'x' + expandedHeight);
-        console.log('  中心オフセット: (' + centerOffsetX + ', ' + centerOffsetY + ')');
-        
-        // メッシュを生成（元のサイズで生成）
+        // メッシュを生成（offsetは使わずwidth/heightのみ）
         const meshData = this.createPuppetMesh(clip.puppet, width, height, time);
         
-        // キャンバスサイズを拡張した範囲に設定
-        canvas.width = Math.ceil(expandedWidth);
-        canvas.height = Math.ceil(expandedHeight);
-        gl.viewport(0, 0, canvas.width, canvas.height);
+        // キャンバスサイズを設定
+        const canvasWidth = width;
+        const canvasHeight = height;
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
+        gl.viewport(0, 0, canvasWidth, canvasHeight);
         
-        // メッシュの頂点座標をオフセット（変形後の範囲がキャンバスの中心になるように）
-        const offsetMeshData = {
-            worldPositions: [],
-            texCoords: meshData.texCoords,
-            indices: meshData.indices
-        };
+        // WebGLで描画（風揺れと同じ関数を使用）
+        this.renderWindShakeWebGL(gl, img, meshData, canvasWidth, canvasHeight);
         
-        for (let i = 0; i < meshData.worldPositions.length; i += 2) {
-            offsetMeshData.worldPositions.push(
-                meshData.worldPositions[i] - bounds.minX,
-                meshData.worldPositions[i + 1] - bounds.minY
-            );
-        }
-        
-        // WebGLで描画
-        this.renderWindShakeWebGL(gl, img, offsetMeshData, canvas.width, canvas.height);
-        
-        // 描画位置を計算（アンカーポイントと中心オフセットを考慮）
-        const drawX = offsetX + centerOffsetX;
-        const drawY = offsetY + centerOffsetY;
-        
-        console.log('  → メインキャンバスに転送: (' + drawX + ', ' + drawY + ')');
-        // 結果をメインキャンバスに描画
-        ctx.drawImage(canvas, drawX, drawY, canvas.width, canvas.height);
+        console.log('  → メインキャンバスに転送: 中心基準 (' + (-canvasWidth/2) + ', ' + (-canvasHeight/2) + ')');
+        // 結果をメインキャンバスに描画（風揺れと同じく中心基準）
+        ctx.drawImage(canvas, -canvasWidth / 2, -canvasHeight / 2, canvasWidth, canvasHeight);
     }
     
     // パペット用メッシュ生成（風揺れと同じ形式）
@@ -7671,66 +7387,6 @@ class StarlitTimelineApp {
         }
         
         return { worldPositions, texCoords, indices };
-    }
-    
-    // パペット変形後の実際のバウンディングボックスを計算
-    getPuppetDeformedBounds(clip, originalWidth, originalHeight) {
-        if (!clip.puppet || !clip.puppet.enabled || clip.puppet.pins.length === 0) {
-            return { minX: 0, minY: 0, maxX: originalWidth, maxY: originalHeight };
-        }
-        
-        const localTime = this.currentTime - clip.startTime;
-        const density = clip.puppet.gridDensity || 20;
-        const stiffness = clip.puppet.stiffness || 0.5;
-        
-        const M = Math.max(4, Math.floor(originalWidth / density));
-        const N = Math.max(4, Math.floor(originalHeight / density));
-        
-        let minX = Infinity;
-        let minY = Infinity;
-        let maxX = -Infinity;
-        let maxY = -Infinity;
-        
-        // 全頂点を走査して変形後の範囲を計算
-        for (let i = 0; i <= N; i++) {
-            for (let j = 0; j <= M; j++) {
-                const u = j / M;
-                const v = i / N;
-                
-                let px = u * originalWidth;
-                let py = v * originalHeight;
-                
-                // ピンの影響を適用
-                for (const pin of clip.puppet.pins) {
-                    const pinPos = this.getPuppetPinPosition(pin, localTime);
-                    const pinOrigX = pin.x * originalWidth;
-                    const pinOrigY = pin.y * originalHeight;
-                    const pinCurrX = pinPos.x * originalWidth;
-                    const pinCurrY = pinPos.y * originalHeight;
-                    
-                    const dx = pinCurrX - pinOrigX;
-                    const dy = pinCurrY - pinOrigY;
-                    
-                    const distX = px - pinOrigX;
-                    const distY = py - pinOrigY;
-                    const dist = Math.sqrt(distX * distX + distY * distY);
-                    
-                    const influenceRadius = Math.max(originalWidth, originalHeight) * stiffness;
-                    const influence = Math.exp(-dist / influenceRadius);
-                    
-                    px += dx * influence;
-                    py += dy * influence;
-                }
-                
-                // 最小・最大値を更新
-                minX = Math.min(minX, px);
-                minY = Math.min(minY, py);
-                maxX = Math.max(maxX, px);
-                maxY = Math.max(maxY, py);
-            }
-        }
-        
-        return { minX, minY, maxX, maxY };
     }
     
     // ==================== アンカーポイント機能 ====================
@@ -7848,286 +7504,6 @@ class StarlitTimelineApp {
         
         if (xInput) xInput.value = (anchor.x * 100).toFixed(1);
         if (yInput) yInput.value = (anchor.y * 100).toFixed(1);
-    }
-    
-    // エフェクト編集ウィンドウを開く
-    openEffectEditor() {
-        this.openEditorWindow('effect');
-    }
-    
-    // クリップエフェクト編集ウィンドウを開く
-    openClipEffectEditor() {
-        this.openEditorWindow('clipEffect');
-    }
-    
-    // 個別のエフェクト詳細ウィンドウを開く
-    openEffectDetailWindow(effectType) {
-        const windowId = `effectDetailWindow_${effectType}`;
-        
-        // 既存のウィンドウがあれば削除
-        const existingWindow = document.getElementById(windowId);
-        if (existingWindow) {
-            existingWindow.remove();
-            return;
-        }
-        
-        // 元のコントロールを探す
-        const sourceControls = document.getElementById(`${effectType}Controls`);
-        if (!sourceControls) {
-            alert('エフェクトコントロールが見つかりません');
-            return;
-        }
-        
-        // タイトルマップ
-        const titleMap = {
-            'letterbox': '🎬 映画風レターボックス',
-            'gradient': '🌈 グラデーション',
-            'diffusion': '✨ ディフュージョン撮影',
-            'colorKey': '🎨 カラーキー',
-            'normalize': '✨ ノーマライズ(スムージング)'
-        };
-        
-        this.createDetailWindow(windowId, titleMap[effectType] || effectType, sourceControls.innerHTML);
-    }
-    
-    // 個別のクリップエフェクト詳細ウィンドウを開く
-    openClipEffectDetailWindow(effectType) {
-        const windowId = `clipEffectDetailWindow_${effectType}`;
-        
-        // 既存のウィンドウがあれば削除
-        const existingWindow = document.getElementById(windowId);
-        if (existingWindow) {
-            existingWindow.remove();
-            return;
-        }
-        
-        // 元のコントロールを探す
-        const sourceControls = document.getElementById(`${effectType}Controls`);
-        if (!sourceControls) {
-            alert('エフェクトコントロールが見つかりません');
-            return;
-        }
-        
-        // タイトルマップ
-        const titleMap = {
-            'puppet': '🎭 パペットアニメーション',
-            'windShake': '🍃 風揺れエフェクト',
-            'gaussianBlur': '🌫️ ガウシアンブラー',
-            'lensBlur': '📷 レンズブラー (被写界深度)'
-        };
-        
-        this.createDetailWindow(windowId, titleMap[effectType] || effectType, sourceControls.innerHTML);
-    }
-    
-    // 詳細ウィンドウを作成
-    createDetailWindow(windowId, title, content) {
-        const window = document.createElement('div');
-        window.id = windowId;
-        window.className = 'effect-editor-window visible';
-        window.style.left = '100px';
-        window.style.top = '100px';
-        window.style.width = '500px';
-        window.style.height = '600px';
-        
-        // ヘッダー
-        const header = document.createElement('div');
-        header.className = 'effect-editor-header';
-        
-        const titleDiv = document.createElement('div');
-        titleDiv.className = 'effect-editor-title';
-        titleDiv.textContent = title;
-        
-        const closeBtn = document.createElement('button');
-        closeBtn.className = 'effect-editor-close';
-        closeBtn.textContent = '×';
-        closeBtn.onclick = () => window.remove();
-        
-        header.appendChild(titleDiv);
-        header.appendChild(closeBtn);
-        
-        // コンテンツエリア - 元のコントロールをそのまま移動
-        const contentDiv = document.createElement('div');
-        contentDiv.className = 'effect-editor-content';
-        
-        // 元のコントロールのIDから取得して移動
-        const effectType = windowId.replace('effectDetailWindow_', '').replace('clipEffectDetailWindow_', '');
-        const originalControls = document.getElementById(`${effectType}Controls`);
-        
-        if (originalControls) {
-            // 元のコントロールを一時的に保存
-            const originalParent = originalControls.parentNode;
-            const originalDisplay = originalControls.style.display;
-            
-            // ウィンドウに移動
-            contentDiv.appendChild(originalControls);
-            originalControls.style.display = 'block';
-            
-            // ウィンドウが閉じられたときに元に戻す
-            const originalClose = closeBtn.onclick;
-            closeBtn.onclick = () => {
-                if (originalParent) {
-                    originalParent.appendChild(originalControls);
-                    originalControls.style.display = originalDisplay;
-                }
-                window.remove();
-            };
-        } else {
-            contentDiv.innerHTML = content;
-        }
-        
-        // リサイズハンドル
-        const resizeHandle = document.createElement('div');
-        resizeHandle.className = 'effect-editor-resize-handle';
-        
-        window.appendChild(header);
-        window.appendChild(contentDiv);
-        window.appendChild(resizeHandle);
-        
-        document.body.appendChild(window);
-        
-        // ドラッグ機能
-        this.makeWindowDraggable(window, header);
-        
-        // リサイズ機能
-        this.makeWindowResizable(window, resizeHandle);
-    }
-    
-    // 編集ウィンドウを開く共通関数
-    openEditorWindow(type) {
-        const isClipEffect = type === 'clipEffect';
-        const windowId = isClipEffect ? 'clipEffectEditorWindow' : 'effectEditorWindow';
-        const sourceId = isClipEffect ? 'clipPropertiesPanel' : 'effects-panel';
-        
-        // 既存のウィンドウがあれば削除
-        const existingWindow = document.getElementById(windowId);
-        if (existingWindow) {
-            existingWindow.remove();
-            return;
-        }
-        
-        // 元のパネルを探す
-        const sourcePanel = isClipEffect ? 
-            document.querySelector('.clip-properties-content') :
-            document.querySelector('.effects-content');
-        
-        if (!sourcePanel) {
-            alert('エフェクトパネルが見つかりません');
-            return;
-        }
-        
-        // ウィンドウを作成
-        const window = document.createElement('div');
-        window.id = windowId;
-        window.className = 'effect-editor-window visible';
-        window.style.left = '100px';
-        window.style.top = '100px';
-        window.style.width = '500px';
-        window.style.height = '600px';
-        
-        // ヘッダー
-        const header = document.createElement('div');
-        header.className = 'effect-editor-header';
-        
-        const title = document.createElement('div');
-        title.className = 'effect-editor-title';
-        title.textContent = isClipEffect ? '🎨 クリップエフェクト編集' : '✨ エフェクト編集';
-        
-        const closeBtn = document.createElement('button');
-        closeBtn.className = 'effect-editor-close';
-        closeBtn.textContent = '×';
-        closeBtn.onclick = () => window.remove();
-        
-        header.appendChild(title);
-        header.appendChild(closeBtn);
-        
-        // コンテンツエリア
-        const content = document.createElement('div');
-        content.className = 'effect-editor-content';
-        content.innerHTML = sourcePanel.innerHTML; // 元のパネルの内容をコピー
-        
-        // リサイズハンドル
-        const resizeHandle = document.createElement('div');
-        resizeHandle.className = 'effect-editor-resize-handle';
-        
-        window.appendChild(header);
-        window.appendChild(content);
-        window.appendChild(resizeHandle);
-        
-        document.body.appendChild(window);
-        
-        // ドラッグ機能
-        this.makeWindowDraggable(window, header);
-        
-        // リサイズ機能
-        this.makeWindowResizable(window, resizeHandle);
-    }
-    
-    // ウィンドウをドラッグ可能にする
-    makeWindowDraggable(windowElement, handle) {
-        let isDragging = false;
-        let currentX;
-        let currentY;
-        let initialX;
-        let initialY;
-        
-        handle.addEventListener('mousedown', (e) => {
-            if (e.target.closest('.effect-editor-close')) return;
-            
-            isDragging = true;
-            initialX = e.clientX - windowElement.offsetLeft;
-            initialY = e.clientY - windowElement.offsetTop;
-        });
-        
-        document.addEventListener('mousemove', (e) => {
-            if (!isDragging) return;
-            
-            e.preventDefault();
-            currentX = e.clientX - initialX;
-            currentY = e.clientY - initialY;
-            
-            windowElement.style.left = currentX + 'px';
-            windowElement.style.top = currentY + 'px';
-        });
-        
-        document.addEventListener('mouseup', () => {
-            isDragging = false;
-        });
-    }
-    
-    // ウィンドウをリサイズ可能にする
-    makeWindowResizable(windowElement, handle) {
-        let isResizing = false;
-        let initialWidth;
-        let initialHeight;
-        let initialMouseX;
-        let initialMouseY;
-        
-        handle.addEventListener('mousedown', (e) => {
-            isResizing = true;
-            initialWidth = windowElement.offsetWidth;
-            initialHeight = windowElement.offsetHeight;
-            initialMouseX = e.clientX;
-            initialMouseY = e.clientY;
-            
-            e.preventDefault();
-        });
-        
-        document.addEventListener('mousemove', (e) => {
-            if (!isResizing) return;
-            
-            const deltaX = e.clientX - initialMouseX;
-            const deltaY = e.clientY - initialMouseY;
-            
-            const newWidth = Math.max(400, initialWidth + deltaX);
-            const newHeight = Math.max(300, initialHeight + deltaY);
-            
-            windowElement.style.width = newWidth + 'px';
-            windowElement.style.height = newHeight + 'px';
-        });
-        
-        document.addEventListener('mouseup', () => {
-            isResizing = false;
-        });
     }
 }
 

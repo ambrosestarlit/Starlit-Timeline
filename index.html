@@ -30,6 +30,14 @@
                 </div>
             </div>
             <div class="menu-item">
+                <span>オブジェクト</span>
+                <div class="submenu">
+                    <div class="submenu-item" onclick="app.createSolidColorClip()">🎨 ベタ塗りクリップ</div>
+                    <div class="submenu-item" onclick="app.createGradientClip()">🌈 グラデーションクリップ</div>
+                    <div class="submenu-item" onclick="app.createStripeClip()">📏 ストライプクリップ</div>
+                </div>
+            </div>
+            <div class="menu-item">
                 <span>書き出し</span>
                 <div class="submenu">
                     <div class="submenu-item" onclick="app.exportWebM()">動画書き出し (WebM・透過対応)</div>
@@ -92,10 +100,6 @@
                     <div class="preview-controls">
                         <div class="time-display" id="timeDisplay">00:00:00.000</div>
                         <div class="resolution-display">1920 x 1080</div>
-                        <div class="preview-zoom-control">
-                            <label>🔍 <span id="previewZoomValue">100%</span></label>
-                            <input type="range" min="25" max="200" value="100" step="5" id="previewZoomSlider" style="width: 120px;">
-                        </div>
                     </div>
                 </div>
 
@@ -107,6 +111,10 @@
                             <span>⏱️ タイムライン</span>
                         </div>
                         <div class="export-range-controls">
+                            <div class="preview-zoom-control" style="margin-right: 15px;">
+                                <label>🔍 <span id="previewZoomValue">100%</span></label>
+                                <input type="range" min="25" max="200" value="100" step="5" id="previewZoomSlider" style="width: 120px;">
+                            </div>
                             <label>📹 FPS:</label>
                             <select id="fpsSelect" class="fps-select" onchange="app.changeFPS(this.value)">
                                 <option value="24">24 fps</option>
@@ -187,14 +195,55 @@
                     <div class="sidebar-header">
                         <h3>✨ エフェクト</h3>
                         <div class="header-controls">
+                            <button class="round-button small" onclick="app.openEffectEditor()" title="別ウィンドウで編集">➕</button>
                             <button class="round-button small" onclick="app.saveEffectSettings()" title="エフェクト設定を保存">💾</button>
                             <button class="round-button small" onclick="app.loadEffectSettings()" title="エフェクト設定を読込">📂</button>
                         </div>
                     </div>
-                    <div class="effect-settings-info">
-                        💡 設定は自動でキャッシュに保存されます｜💾 でファイル保存（バックアップ）
-                    </div>
                     <div class="effects-content">
+                        <div class="effect-item">
+                            <div class="effect-header">
+                                <span>🎬 映画風レターボックス</span>
+                                <input type="checkbox" id="letterboxEnable" onchange="app.updatePreview()">
+                                <button class="round-button small" onclick="app.openEffectDetailWindow('letterbox')" title="詳細設定">➕</button>
+                            </div>
+                        </div>
+
+                        <div class="effect-item">
+                            <div class="effect-header">
+                                <span>🌈 グラデーション</span>
+                                <input type="checkbox" id="gradientEnable" onchange="app.updatePreview()">
+                                <button class="round-button small" onclick="app.openEffectDetailWindow('gradient')" title="詳細設定">➕</button>
+                            </div>
+                        </div>
+
+                        <div class="effect-item">
+                            <div class="effect-header">
+                                <span>✨ ディフュージョン撮影</span>
+                                <input type="checkbox" id="diffusionEnable" onchange="app.updatePreview()">
+                                <button class="round-button small" onclick="app.openEffectDetailWindow('diffusion')" title="詳細設定">➕</button>
+                            </div>
+                        </div>
+
+                        <div class="effect-item">
+                            <div class="effect-header">
+                                <span>🎨 カラーキー</span>
+                                <input type="checkbox" id="colorKeyEnable" onchange="app.updatePreview()">
+                                <button class="round-button small" onclick="app.openEffectDetailWindow('colorKey')" title="詳細設定">➕</button>
+                            </div>
+                        </div>
+
+                        <div class="effect-item">
+                            <div class="effect-header">
+                                <span>✨ ノーマライズ(スムージング)</span>
+                                <input type="checkbox" id="normalizeEnable" onchange="app.updatePreview()">
+                                <button class="round-button small" onclick="app.openEffectDetailWindow('normalize')" title="詳細設定">➕</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 以下は非表示で別ウィンドウ用に保持 -->
+                    <div class="effects-content-hidden" style="display: none;">
                         <div class="effect-item">
                             <div class="effect-header" onclick="app.toggleEffect('letterbox')">
                                 <span>🎬 映画風レターボックス</span>
@@ -369,11 +418,114 @@
                     <div class="sidebar-header">
                         <h3>🎨 クリップエフェクト</h3>
                         <div class="header-controls">
+                            <button class="round-button small" onclick="app.openClipEffectEditor()" title="別ウィンドウで編集">➕</button>
                             <button class="round-button small" onclick="app.saveClipEffectSettings()" title="クリップエフェクト設定を保存">💾</button>
                             <button class="round-button small" onclick="app.loadClipEffectSettings()" title="クリップエフェクト設定を読込">📂</button>
                         </div>
                     </div>
                     <div class="clip-properties-content">
+                        <div class="effect-item">
+                            <div class="effect-header">
+                                <span>🎭 パペットアニメーション</span>
+                                <input type="checkbox" id="puppetEnabled">
+                                <button class="round-button small" onclick="app.openClipEffectDetailWindow('puppet')" title="詳細設定">➕</button>
+                            </div>
+                        </div>
+                        
+                        <div class="effect-item">
+                            <div class="effect-header">
+                                <span>🍃 風揺れエフェクト</span>
+                                <input type="checkbox" id="windShakeEnabled">
+                                <button class="round-button small" onclick="app.openClipEffectDetailWindow('windShake')" title="詳細設定">➕</button>
+                            </div>
+                        </div>
+                        
+                        <div class="effect-item">
+                            <div class="effect-header">
+                                <span>🌫️ ガウシアンブラー</span>
+                                <input type="checkbox" id="gaussianBlurEnabled">
+                                <button class="round-button small" onclick="app.openClipEffectDetailWindow('gaussianBlur')" title="詳細設定">➕</button>
+                            </div>
+                        </div>
+                        
+                        <div class="effect-item">
+                            <div class="effect-header">
+                                <span>📷 レンズブラー (被写界深度)</span>
+                                <input type="checkbox" id="lensBlurEnabled">
+                                <button class="round-button small" onclick="app.openClipEffectDetailWindow('lensBlur')" title="詳細設定">➕</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 以下は非表示で別ウィンドウ用に保持 -->
+                    <div class="clip-properties-content-hidden" style="display: none;">
+                        <!-- パペットアニメーション -->
+                        <div class="effect-item">
+                            <div class="effect-header" onclick="app.toggleClipEffect('puppet')">
+                                <span>🎭 パペットアニメーション</span>
+                                <input type="checkbox" id="puppetEnabled">
+                            </div>
+                            <div class="effect-controls" id="puppetControls" style="display: none;">
+                                <!-- パペット編集モード切替ボタン -->
+                                <div style="margin-bottom: 15px;">
+                                    <button id="puppetEditModeBtn" onclick="app.togglePuppetEditMode()" style="width: 100%; padding: 10px; background: var(--chocolate-main); border: none; border-radius: 4px; color: white; font-size: 13px; cursor: pointer; font-weight: bold;">
+                                        🎭 パペット編集モード OFF
+                                    </button>
+                                    <div style="background: rgba(210, 105, 30, 0.2); padding: 8px; margin-top: 8px; border-radius: 4px; font-size: 11px;">
+                                        💡 編集モードONにするとピンの移動・配置ができます。<br>
+                                        ONの間は通常のトランスフォーム操作(移動・回転・拡大)は無効になります。
+                                    </div>
+                                </div>
+                                
+                                <div class="effect-section">
+                                    <div class="effect-section-title">📌 ピン管理 (最大5個)</div>
+                                    
+                                    <div style="background: rgba(210, 105, 30, 0.2); padding: 8px; margin-bottom: 10px; border-radius: 4px; font-size: 11px;">
+                                        💡 ピンボタンをクリック→画像上でクリックして配置!
+                                    </div>
+                                    
+                                    <!-- ピンボタン01-05 -->
+                                    <div style="display: flex; flex-direction: column; gap: 8px; margin: 10px 0;">
+                                        <button class="puppet-pin-button" onclick="app.startAddPuppetPin(0)" style="display: flex; align-items: center; gap: 10px; padding: 8px; background: var(--chocolate-main); border: none; border-radius: 4px; color: white; cursor: pointer;">
+                                            <img src="pin-01.png" style="width: 24px; height: 24px;">
+                                            <span>01 ピンを配置</span>
+                                        </button>
+                                        <button class="puppet-pin-button" onclick="app.startAddPuppetPin(1)" style="display: flex; align-items: center; gap: 10px; padding: 8px; background: var(--chocolate-main); border: none; border-radius: 4px; color: white; cursor: pointer;">
+                                            <img src="pin-02.png" style="width: 24px; height: 24px;">
+                                            <span>02 ピンを配置</span>
+                                        </button>
+                                        <button class="puppet-pin-button" onclick="app.startAddPuppetPin(2)" style="display: flex; align-items: center; gap: 10px; padding: 8px; background: var(--chocolate-main); border: none; border-radius: 4px; color: white; cursor: pointer;">
+                                            <img src="pin-03.png" style="width: 24px; height: 24px;">
+                                            <span>03 ピンを配置</span>
+                                        </button>
+                                        <button class="puppet-pin-button" onclick="app.startAddPuppetPin(3)" style="display: flex; align-items: center; gap: 10px; padding: 8px; background: var(--chocolate-main); border: none; border-radius: 4px; color: white; cursor: pointer;">
+                                            <img src="pin-04.png" style="width: 24px; height: 24px;">
+                                            <span>04 ピンを配置</span>
+                                        </button>
+                                        <button class="puppet-pin-button" onclick="app.startAddPuppetPin(4)" style="display: flex; align-items: center; gap: 10px; padding: 8px; background: var(--chocolate-main); border: none; border-radius: 4px; color: white; cursor: pointer;">
+                                            <img src="pin-05.png" style="width: 24px; height: 24px;">
+                                            <span>05 ピンを配置</span>
+                                        </button>
+                                    </div>
+                                    
+                                    <div id="puppetPinsList" style="margin-top: 10px; max-height: 200px; overflow-y: auto;">
+                                        <div class="empty-message">ピンなし</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="effect-section">
+                                    <div class="effect-section-title" style="cursor: pointer;" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'block' : 'none'">⚙️ メッシュ設定 ▼</div>
+                                    <div style="display: none;">
+                                        <label>グリッド密度: <span id="puppetGridDensityValue">20</span></label>
+                                        <input type="range" min="5" max="50" value="20" step="1" class="effect-slider" id="puppetGridDensity">
+                                        
+                                        <label>変形の硬さ: <span id="puppetStiffnessValue">50</span></label>
+                                        <input type="range" min="0" max="100" value="50" step="1" class="effect-slider" id="puppetStiffness">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
                         <!-- 風揺れエフェクト -->
                         <div class="effect-item">
                             <div class="effect-header" onclick="app.toggleClipEffect('windShake')">
