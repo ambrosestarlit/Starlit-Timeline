@@ -128,12 +128,8 @@ class StarlitTimelineApp {
         this.assetFilter = 'all'; // all, image, video, audio
         
         // プロパティセクションの開閉状態を保持
-        this.propertySectionStates = {
-            transform: false,
-            transition: false,
-            audio: false,
-            clipping: false
-        };
+        // プロパティセクションの開閉状態（現在は未使用）
+        this.propertySectionStates = {};
         
         // AEプロパティの開閉状態を保持
         this.aePropertyStates = {
@@ -2313,6 +2309,7 @@ class StarlitTimelineApp {
     }
     
     // プロパティパネル
+    // プロパティパネル
     updatePropertiesPanel() {
         const panel = document.getElementById('propertiesContent');
         
@@ -2333,6 +2330,7 @@ class StarlitTimelineApp {
                 <div class="property-value">${clip.asset.name}</div>
             </div>
             
+            <!-- 開始時間 -->
             <div class="property-group">
                 <div class="property-label">開始時間: <input type="number" id="startTimeValue" value="${clip.startTime.toFixed(2)}" 
                     min="0" max="30" step="0.1" class="value-input"
@@ -2342,6 +2340,7 @@ class StarlitTimelineApp {
                     oninput="app.updateClipProperty('startTime', parseFloat(this.value)); document.getElementById('startTimeValue').value = this.value">
             </div>
             
+            <!-- 継続時間 -->
             <div class="property-group">
                 <div class="property-label">継続時間: <input type="number" id="durationValue" value="${clip.duration.toFixed(2)}" 
                     min="0.1" max="30" step="0.1" class="value-input"
@@ -2378,13 +2377,7 @@ class StarlitTimelineApp {
         
         // 生成オブジェクト（solid/gradient/stripe）の色設定
         if (clip.asset.type === 'solid' || clip.asset.type === 'gradient' || clip.asset.type === 'stripe') {
-            propertiesHTML += `
-                <div class="property-section-header" onclick="app.togglePropertySection('colors')">
-                    <span class="section-toggle-icon" id="colorsToggle">▼</span>
-                    🎨 カラー設定
-                </div>
-                <div class="property-section-content" id="colorsContent">
-            `;
+            propertiesHTML += `<div style="margin: 16px 0; padding: 12px; background: rgba(210, 105, 30, 0.1); border-radius: 8px;">`;
             
             if (clip.asset.type === 'solid') {
                 propertiesHTML += `
@@ -2448,71 +2441,67 @@ class StarlitTimelineApp {
                         <select onchange="app.updateGeneratedObjectProperty('direction', this.value)" style="width: 100%; padding: 8px;">
                             <option value="1" ${clip.asset.direction === '1' ? 'selected' : ''}>横</option>
                             <option value="2" ${clip.asset.direction === '2' ? 'selected' : ''}>縦</option>
-                            <option value="3" ${clip.asset.direction === '3' ? 'selected' : ''}>斜め</option>
                         </select>
                     </div>
                 `;
             }
             
-            propertiesHTML += `
-                </div>
-            `;
+            propertiesHTML += `</div>`;
         }
         
-        // 映像クリップと生成オブジェクトの場合はトランスフォーム設定
+        // 映像クリップと生成オブジェクトの場合
         if (clip.asset.type === 'image' || clip.asset.type === 'video' || clip.asset.type === 'sequence' || 
             clip.asset.type === 'solid' || clip.asset.type === 'gradient' || clip.asset.type === 'stripe') {
+            
             const currentX = this.getKeyframeValue(clip, 'x', localTime);
             const currentY = this.getKeyframeValue(clip, 'y', localTime);
             const currentRotation = this.getKeyframeValue(clip, 'rotation', localTime);
             const currentOpacity = this.getKeyframeValue(clip, 'opacity', localTime);
             const currentScale = this.getKeyframeValue(clip, 'scale', localTime);
             
-            // 親クリップの名前を取得
-            let parentClipName = 'なし';
-            if (clip.parentId) {
-                const parentClip = this.clips.find(c => c.id === clip.parentId);
-                if (parentClip) {
-                    parentClipName = parentClip.asset.name;
-                }
-            }
-            
-            // クリッピングセクション
-            propertiesHTML += this.clippingManager.generateClippingHTML(clip);
-            
-            // 親子関係セクション
+            // ===== ブレンドモード（ドロップダウンのみ、常に表示） =====
             propertiesHTML += `
-                <div class="property-section-header" onclick="app.togglePropertySection('parenting')">
-                    <span class="section-toggle-icon" id="parentingToggle">▶</span>
-                    🔗 親子関係
-                </div>
-                <div class="property-section-content collapsed" id="parentingContent">
-                    <div class="ae-property-group">
-                        <div class="ae-property-header">
-                            <span class="ae-property-name">👪 親クリップ</span>
-                            <span class="ae-property-value" style="font-size: 11px; color: ${clip.parentId ? '#FFD700' : '#999'};">${parentClipName}</span>
-                        </div>
-                        <div class="ae-property-content" style="padding: 10px; display: block;">
-                            <select id="parentClipSelect" class="property-slider" style="width: 100%; padding: 8px; margin-bottom: 8px; background: var(--chocolate-main); color: var(--biscuit-light); border: 1px solid var(--chocolate-dark); border-radius: 4px;">
-                                <option value="">なし (独立)</option>
-                            </select>
-                            <button class="small-button" onclick="app.setParentClip()" style="width: 100%; margin-bottom: 4px; padding: 8px; background: var(--accent-orange); color: white; border: none; border-radius: 4px; cursor: pointer;">
-                                🔗 親を設定
-                            </button>
-                            <button class="small-button" onclick="app.removeParentClip()" style="width: 100%; padding: 8px; background: var(--chocolate-dark); color: white; border: none; border-radius: 4px; cursor: pointer;">
-                                ✂️ 親子関係を解除
-                            </button>
-                        </div>
-                    </div>
+                <div class="property-group">
+                    <div class="property-label">🎨 ブレンドモード</div>
+                    <select id="blendModeSelect" class="property-slider" style="width: 100%; padding: 8px; background: var(--chocolate-main); color: var(--biscuit-light); border: 1px solid var(--chocolate-dark); border-radius: 4px;" onchange="app.setBlendMode(this.value)">
+                        <optgroup label="通常">
+                            <option value="normal" ${clip.blendMode === 'normal' ? 'selected' : ''}>通常</option>
+                        </optgroup>
+                        <optgroup label="暗くする系">
+                            <option value="multiply" ${clip.blendMode === 'multiply' ? 'selected' : ''}>乗算</option>
+                            <option value="darken" ${clip.blendMode === 'darken' ? 'selected' : ''}>比較(暗)</option>
+                            <option value="color-burn" ${clip.blendMode === 'color-burn' ? 'selected' : ''}>焼き込みカラー</option>
+                        </optgroup>
+                        <optgroup label="明るくする系">
+                            <option value="screen" ${clip.blendMode === 'screen' ? 'selected' : ''}>スクリーン</option>
+                            <option value="lighten" ${clip.blendMode === 'lighten' ? 'selected' : ''}>比較(明)</option>
+                            <option value="color-dodge" ${clip.blendMode === 'color-dodge' ? 'selected' : ''}>覆い焼きカラー</option>
+                            <option value="lighter" ${clip.blendMode === 'lighter' ? 'selected' : ''}>加算</option>
+                        </optgroup>
+                        <optgroup label="コントラスト">
+                            <option value="overlay" ${clip.blendMode === 'overlay' ? 'selected' : ''}>オーバーレイ</option>
+                            <option value="soft-light" ${clip.blendMode === 'soft-light' ? 'selected' : ''}>ソフトライト</option>
+                            <option value="hard-light" ${clip.blendMode === 'hard-light' ? 'selected' : ''}>ハードライト</option>
+                        </optgroup>
+                        <optgroup label="比較">
+                            <option value="difference" ${clip.blendMode === 'difference' ? 'selected' : ''}>差の絶対値</option>
+                            <option value="exclusion" ${clip.blendMode === 'exclusion' ? 'selected' : ''}>除外</option>
+                        </optgroup>
+                        <optgroup label="色調整">
+                            <option value="hue" ${clip.blendMode === 'hue' ? 'selected' : ''}>色相</option>
+                            <option value="saturation" ${clip.blendMode === 'saturation' ? 'selected' : ''}>彩度</option>
+                            <option value="color" ${clip.blendMode === 'color' ? 'selected' : ''}>カラー</option>
+                            <option value="luminosity" ${clip.blendMode === 'luminosity' ? 'selected' : ''}>輝度</option>
+                        </optgroup>
+                    </select>
                 </div>
             `;
             
+            // ===== トランスフォーム（常に表示） =====
             propertiesHTML += `
-                <div class="property-section-header" onclick="app.togglePropertySection('transform')">
-                    <span class="section-toggle-icon" id="transformToggle">▼</span>
-                    📐 トランスフォーム
-                </div>
-                <div class="property-section-content" id="transformContent">
+                <div style="margin: 16px 0; padding: 12px; background: rgba(210, 105, 30, 0.15); border-radius: 8px;">
+                    <h3 style="margin: 0 0 12px 0; font-size: 14px; color: var(--biscuit-light);">📐 トランスフォーム</h3>
+                    
                     <!-- 位置 -->
                     <div class="ae-property-group">
                         <div class="ae-property-header" onclick="app.toggleAEProperty('position')">
@@ -2569,7 +2558,7 @@ class StarlitTimelineApp {
                         </div>
                         <div class="ae-property-content collapsed" id="rotationContent">
                             <div class="ae-subproperty">
-                                <input type="range" class="property-slider" value="${currentRotation.toFixed(0)}"
+                                <input type="range" class="property-slider" value="${currentRotation.toFixed(0)}" 
                                     min="-180" max="180" step="1" id="rotationSlider"
                                     oninput="document.querySelector('#rotationContent').parentElement.querySelector('.ae-property-value').textContent = this.value + '°'; app.setKeyframeValueLive('rotation', parseFloat(this.value))"
                                     onchange="app.setKeyframeValue('rotation', parseFloat(this.value))">
@@ -2596,152 +2585,126 @@ class StarlitTimelineApp {
                         </div>
                     </div>
                     
-                    <div class="property-group" style="margin-top: 10px;">
-                        <div class="property-label">
-                            <input type="checkbox" id="useOriginalSize" ${clip.useOriginalSize ? 'checked' : ''} 
-                                onchange="app.updateClipProperty('useOriginalSize', this.checked)">
-                            原寸表示
-                        </div>
-                    </div>
-                    
-                    <!-- ブレンドモード -->
-                    <div class="property-group">
-                        <div class="property-label">🎨 ブレンドモード</div>
-                        <select class="property-input" onchange="app.updateClipProperty('blendMode', this.value)">
-                            <option value="normal" ${clip.blendMode === 'normal' ? 'selected' : ''}>通常</option>
-                            <option value="multiply" ${clip.blendMode === 'multiply' ? 'selected' : ''}>乗算</option>
-                            <option value="screen" ${clip.blendMode === 'screen' ? 'selected' : ''}>スクリーン</option>
-                            <option value="overlay" ${clip.blendMode === 'overlay' ? 'selected' : ''}>オーバーレイ</option>
-                            <option value="darken" ${clip.blendMode === 'darken' ? 'selected' : ''}>比較(暗)</option>
-                            <option value="lighten" ${clip.blendMode === 'lighten' ? 'selected' : ''}>比較(明)</option>
-                            <option value="color-dodge" ${clip.blendMode === 'color-dodge' ? 'selected' : ''}>覆い焼きカラー</option>
-                            <option value="color-burn" ${clip.blendMode === 'color-burn' ? 'selected' : ''}>焼き込みカラー</option>
-                            <option value="hard-light" ${clip.blendMode === 'hard-light' ? 'selected' : ''}>ハードライト</option>
-                            <option value="soft-light" ${clip.blendMode === 'soft-light' ? 'selected' : ''}>ソフトライト</option>
-                            <option value="difference" ${clip.blendMode === 'difference' ? 'selected' : ''}>差の絶対値</option>
-                            <option value="exclusion" ${clip.blendMode === 'exclusion' ? 'selected' : ''}>除外</option>
-                            <option value="hue" ${clip.blendMode === 'hue' ? 'selected' : ''}>色相</option>
-                            <option value="saturation" ${clip.blendMode === 'saturation' ? 'selected' : ''}>彩度</option>
-                            <option value="color" ${clip.blendMode === 'color' ? 'selected' : ''}>カラー</option>
-                            <option value="luminosity" ${clip.blendMode === 'luminosity' ? 'selected' : ''}>輝度</option>
-                        </select>
-                    </div>
-                    
                     <!-- アンカーポイント -->
-                    <div class="ae-property-group" style="margin-top: 15px;">
-                        <div class="ae-property-header" onclick="app.toggleAEProperty('anchorPoint')">
-                            <span class="ae-property-icon" id="anchorPointIcon">▶</span>
-                            <span class="ae-property-name">⚓ アンカーポイント</span>
-                        </div>
-                        <div class="ae-property-content collapsed" id="anchorPointContent">
-                            <div class="ae-subproperty">
-                                <label>X: <span id="anchorPointXValue">${((clip.anchorPoint?.x || 0.5) * 100).toFixed(1)}%</span></label>
-                                <input type="range" class="property-slider" value="${((clip.anchorPoint?.x || 0.5) * 100).toFixed(1)}"
-                                    min="0" max="100" step="0.1" id="anchorPointX"
-                                    oninput="document.getElementById('anchorPointXValue').textContent = this.value + '%'; app.setAnchorPointLive('x', parseFloat(this.value) / 100)"
+                    <div class="property-group" style="margin-top: 8px;">
+                        <div class="property-label">⚓ アンカーポイント</div>
+                        <div style="display: flex; gap: 8px;">
+                            <div style="flex: 1;">
+                                <label style="font-size: 11px;">X: <span id="anchorXValue">${((clip.anchorPoint?.x || 0.5) * 100).toFixed(0)}%</span></label>
+                                <input type="range" class="property-slider" value="${(clip.anchorPoint?.x || 0.5) * 100}" 
+                                    min="0" max="100" step="1"
+                                    oninput="document.getElementById('anchorXValue').textContent = this.value + '%'; app.setAnchorPointLive('x', parseFloat(this.value) / 100)"
                                     onchange="app.setAnchorPoint('x', parseFloat(this.value) / 100)">
                             </div>
-                            <div class="ae-subproperty">
-                                <label>Y: <span id="anchorPointYValue">${((clip.anchorPoint?.y || 0.5) * 100).toFixed(1)}%</span></label>
-                                <input type="range" class="property-slider" value="${((clip.anchorPoint?.y || 0.5) * 100).toFixed(1)}"
-                                    min="0" max="100" step="0.1" id="anchorPointY"
-                                    oninput="document.getElementById('anchorPointYValue').textContent = this.value + '%'; app.setAnchorPointLive('y', parseFloat(this.value) / 100)"
+                            <div style="flex: 1;">
+                                <label style="font-size: 11px;">Y: <span id="anchorYValue">${((clip.anchorPoint?.y || 0.5) * 100).toFixed(0)}%</span></label>
+                                <input type="range" class="property-slider" value="${(clip.anchorPoint?.y || 0.5) * 100}" 
+                                    min="0" max="100" step="1"
+                                    oninput="document.getElementById('anchorYValue').textContent = this.value + '%'; app.setAnchorPointLive('y', parseFloat(this.value) / 100)"
                                     onchange="app.setAnchorPoint('y', parseFloat(this.value) / 100)">
                             </div>
-                            <div style="display: flex; gap: 5px; margin-top: 10px;">
-                                <button class="small-button" onclick="app.resetAnchorPoint()" style="flex: 1;">🎯 中心にリセット</button>
-                                <button class="small-button" onclick="app.setAnchorPointByClick()" style="flex: 1;">📍 クリックで設定</button>
-                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // ===== クリッピング（常に表示） =====
+            let clipSourceName = 'なし';
+            if (clip.clipSource) {
+                const clipSourceClip = this.clips.find(c => c.id == clip.clipSource);
+                if (clipSourceClip && clipSourceClip.asset) {
+                    clipSourceName = clipSourceClip.asset.name;
+                }
+            }
+            
+            propertiesHTML += `
+                <div style="margin: 16px 0; padding: 12px; background: rgba(210, 105, 30, 0.15); border-radius: 8px;">
+                    <h3 style="margin: 0 0 8px 0; font-size: 14px; color: var(--biscuit-light);">✂️ クリッピング</h3>
+                    <div class="property-group">
+                        <div class="property-label" style="font-size: 12px; color: ${clip.clipSource ? '#FFD700' : '#999'};">
+                            現在: ${clipSourceName}
+                        </div>
+                        <select id="clipSourceSelect" class="property-slider" style="width: 100%; padding: 8px; margin-bottom: 8px; background: var(--chocolate-main); color: var(--biscuit-light); border: 1px solid var(--chocolate-dark); border-radius: 4px;">
+                            <option value="">なし</option>
+                        </select>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="small-button" onclick="app.clippingManager.setClipSource()" style="flex: 1; padding: 8px; background: var(--accent-orange); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
+                                ✂️ 設定
+                            </button>
+                            <button class="small-button" onclick="app.clippingManager.removeClipSource()" style="flex: 1; padding: 8px; background: var(--chocolate-dark); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
+                                ❌ 解除
+                            </button>
+                        </div>
+                        <div style="background: rgba(210, 105, 30, 0.2); padding: 8px; margin-top: 8px; border-radius: 4px; font-size: 10px; line-height: 1.4; color: var(--biscuit-light);">
+                            💡 クリップソースの不透明部分だけに表示されます
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // ===== 親子関係（常に表示） =====
+            let parentClipName = 'なし';
+            if (clip.parentId) {
+                const parentClip = this.clips.find(c => c.id === clip.parentId);
+                if (parentClip) {
+                    parentClipName = parentClip.asset.name;
+                }
+            }
+            
+            propertiesHTML += `
+                <div style="margin: 16px 0; padding: 12px; background: rgba(210, 105, 30, 0.15); border-radius: 8px;">
+                    <h3 style="margin: 0 0 8px 0; font-size: 14px; color: var(--biscuit-light);">🔗 親子関係</h3>
+                    <div class="property-group">
+                        <div class="property-label" style="font-size: 12px; color: ${clip.parentId ? '#FFD700' : '#999'};">
+                            現在: ${parentClipName}
+                        </div>
+                        <select id="parentClipSelect" class="property-slider" style="width: 100%; padding: 8px; margin-bottom: 8px; background: var(--chocolate-main); color: var(--biscuit-light); border: 1px solid var(--chocolate-dark); border-radius: 4px;">
+                            <option value="">なし (独立)</option>
+                        </select>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="small-button" onclick="app.setParentClip()" style="flex: 1; padding: 8px; background: var(--accent-orange); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
+                                🔗 設定
+                            </button>
+                            <button class="small-button" onclick="app.removeParentClip()" style="flex: 1; padding: 8px; background: var(--chocolate-dark); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
+                                ✂️ 解除
+                            </button>
                         </div>
                     </div>
                 </div>
             `;
         }
         
-        propertiesHTML += `
-            <!-- トランジション設定 -->
-            <div class="property-section-header" onclick="app.togglePropertySection('transition')">
-                <span class="section-toggle-icon" id="transitionToggle">▼</span>
-                🎬 トランジション
-            </div>
-            <div class="property-section-content" id="transitionContent">
-                <div class="property-group">
-                    <div class="property-label">イン</div>
-                    <select class="property-input" onchange="app.updateTransition('in', 'type', this.value)">
-                        ${this.availableTransitions.map(t => 
-                            `<option value="${t.id}" ${clip.transitionIn.type === t.id ? 'selected' : ''}>${t.name}</option>`
-                        ).join('')}
-                    </select>
-                </div>
-                
-                <div class="property-group">
-                    <div class="property-label">イン時間: <span id="transInDurationValue">${clip.transitionIn.duration.toFixed(2)}秒</span></div>
-                    <input type="range" class="property-slider" value="${clip.transitionIn.duration.toFixed(2)}" 
-                        min="0.1" max="${clip.duration / 2}" step="0.1"
-                        oninput="app.updateTransition('in', 'duration', parseFloat(this.value)); document.getElementById('transInDurationValue').textContent = this.value + '秒'">
-                </div>
-                
-                <div class="property-group">
-                    <div class="property-label">アウト</div>
-                    <select class="property-input" onchange="app.updateTransition('out', 'type', this.value)">
-                        ${this.availableTransitions.map(t => 
-                            `<option value="${t.id}" ${clip.transitionOut.type === t.id ? 'selected' : ''}>${t.name}</option>`
-                        ).join('')}
-                    </select>
-                </div>
-                
-                <div class="property-group">
-                    <div class="property-label">アウト時間: <span id="transOutDurationValue">${clip.transitionOut.duration.toFixed(2)}秒</span></div>
-                    <input type="range" class="property-slider" value="${clip.transitionOut.duration.toFixed(2)}" 
-                        min="0.1" max="${clip.duration / 2}" step="0.1"
-                        oninput="app.updateTransition('out', 'duration', parseFloat(this.value)); document.getElementById('transOutDurationValue').textContent = this.value + '秒'">
-                </div>
-            </div>
-        `;
-        
-        // 音声クリップの場合はボリューム設定
-        if (clip.asset.type === 'audio' || clip.asset.type === 'video') {
+        // 音声クリップの場合
+        if (clip.asset.type === 'audio') {
+            const currentVolume = clip.volume || 1.0;
             const currentPan = this.getKeyframeValue(clip, 'pan', localTime);
             
             propertiesHTML += `
-                <div class="property-section-header" onclick="app.togglePropertySection('audio')">
-                    <span class="section-toggle-icon" id="audioToggle">▼</span>
-                    🔊 音声
-                </div>
-                <div class="property-section-content" id="audioContent">
+                <div style="margin: 16px 0; padding: 12px; background: rgba(210, 105, 30, 0.15); border-radius: 8px;">
+                    <h3 style="margin: 0 0 12px 0; font-size: 14px; color: var(--biscuit-light);">🔊 オーディオ</h3>
+                    
                     <div class="property-group">
-                        <div class="property-label">音量: <input type="number" id="volumeValue" value="${(clip.volume * 100).toFixed(0)}" 
-                            min="0" max="200" step="1" class="value-input"
-                            oninput="app.updateClipProperty('volume', parseFloat(this.value) / 100); document.getElementById('volumeSlider').value = this.value">%</div>
-                        <input type="range" class="property-slider" id="volumeSlider" value="${(clip.volume * 100).toFixed(0)}" 
+                        <div class="property-label">🔊 音量: <span id="volumeValue">${(currentVolume * 100).toFixed(0)}%</span></div>
+                        <input type="range" class="property-slider" value="${(currentVolume * 100).toFixed(0)}" 
                             min="0" max="200" step="1"
-                            oninput="app.updateClipProperty('volume', parseFloat(this.value) / 100); document.getElementById('volumeValue').value = this.value">
+                            oninput="document.getElementById('volumeValue').textContent = this.value + '%'; app.updateClipProperty('volume', parseFloat(this.value) / 100)"
+                            onchange="app.updateClipProperty('volume', parseFloat(this.value) / 100)">
                     </div>
                     
-                    <!-- PAN -->
                     <div class="ae-property-group">
                         <div class="ae-property-header" onclick="app.toggleAEProperty('pan')">
                             <span class="ae-property-icon" id="panIcon">▶</span>
                             <span class="ae-property-name">🎚️ パン</span>
-                            <span class="ae-property-value">${currentPan > 0 ? 'R' + (currentPan * 100).toFixed(0) : currentPan < 0 ? 'L' + (-currentPan * 100).toFixed(0) : 'C'}</span>
+                            <span class="ae-property-value">${(currentPan * 100).toFixed(0)}</span>
                             <button class="ae-keyframe-indicator ${this.hasKeyframeAt(clip, 'pan', localTime) ? 'active' : ''}" 
                                 onclick="event.stopPropagation(); app.toggleKeyframe('pan')">💎</button>
                         </div>
                         <div class="ae-property-content collapsed" id="panContent">
                             <div class="ae-subproperty">
-                                <div style="display: flex; justify-content: space-between; font-size: 11px; color: #999; margin-bottom: 4px;">
-                                    <span>L</span>
-                                    <span>C</span>
-                                    <span>R</span>
-                                </div>
+                                <label style="font-size: 11px;">左 ← <span id="panValue">${(currentPan * 100).toFixed(0)}</span> → 右</label>
                                 <input type="range" class="property-slider" value="${(currentPan * 100).toFixed(0)}" 
-                                    min="-100" max="100" step="1" id="panSlider"
-                                    oninput="
-                                        const v = parseFloat(this.value);
-                                        const label = v > 0 ? 'R' + v : v < 0 ? 'L' + (-v) : 'C';
-                                        document.querySelector('#panContent').parentElement.querySelector('.ae-property-value').textContent = label;
-                                        app.setKeyframeValueLive('pan', v / 100)
-                                    "
+                                    min="-100" max="100" step="1"
+                                    oninput="document.getElementById('panValue').textContent = this.value; document.querySelector('#panContent').parentElement.querySelector('.ae-property-value').textContent = this.value; app.setKeyframeValueLive('pan', parseFloat(this.value) / 100)"
                                     onchange="app.setKeyframeValue('pan', parseFloat(this.value) / 100)">
                             </div>
                         </div>
@@ -2752,60 +2715,11 @@ class StarlitTimelineApp {
         
         panel.innerHTML = propertiesHTML;
         
-        // 保存された開閉状態を復元
-        Object.keys(this.propertySectionStates).forEach(sectionName => {
-            const content = document.getElementById(`${sectionName}Content`);
-            const toggle = document.getElementById(`${sectionName}Toggle`);
-            
-            if (content && toggle) {
-                const isOpen = this.propertySectionStates[sectionName];
-                if (isOpen) {
-                    content.classList.remove('collapsed');
-                    toggle.classList.remove('collapsed');
-                } else {
-                    content.classList.add('collapsed');
-                    toggle.classList.add('collapsed');
-                }
-            }
-        });
-        
-        // AEプロパティの開閉状態を復元
-        Object.keys(this.aePropertyStates).forEach(propertyName => {
-            const content = document.getElementById(`${propertyName}Content`);
-            const icon = document.getElementById(`${propertyName}Icon`);
-            
-            if (content && icon) {
-                const isOpen = this.aePropertyStates[propertyName];
-                if (isOpen) {
-                    content.classList.remove('collapsed');
-                    icon.classList.add('expanded');
-                } else {
-                    content.classList.add('collapsed');
-                    icon.classList.remove('expanded');
-                }
-            }
-        });
-        
-        // 風揺れUIの更新
-        this.updateWindShakeUI();
-        
-        // パペットUIの更新
-        this.updatePuppetUI();
-        
-        // アンカーポイントUIの更新
-        this.updateAnchorPointUI();
-        
         // 親子関係UIの更新（選択肢を追加）
         if (this.selectedClip && (this.selectedClip.asset.type === 'image' || this.selectedClip.asset.type === 'video' || 
             this.selectedClip.asset.type === 'sequence' || this.selectedClip.asset.type === 'solid' || 
             this.selectedClip.asset.type === 'gradient' || this.selectedClip.asset.type === 'stripe')) {
             this.updateParentingUI();
-        }
-        
-        // クリッピングUIの更新（選択肢を追加）
-        if (this.selectedClip && (this.selectedClip.asset.type === 'image' || this.selectedClip.asset.type === 'video' || 
-            this.selectedClip.asset.type === 'sequence' || this.selectedClip.asset.type === 'solid' || 
-            this.selectedClip.asset.type === 'gradient' || this.selectedClip.asset.type === 'stripe')) {
             this.clippingManager.updateClipSourceSelect(this.selectedClip);
         }
     }
@@ -3040,6 +2954,40 @@ class StarlitTimelineApp {
         this.updatePreview();
         this.drawTimeline();
         this.saveHistory();
+    }
+    
+    // ブレンドモードの表示名を取得
+    getBlendModeDisplayName(mode) {
+        const modeNames = {
+            'normal': '通常',
+            'multiply': '乗算',
+            'screen': 'スクリーン',
+            'overlay': 'オーバーレイ',
+            'darken': '比較(暗)',
+            'lighten': '比較(明)',
+            'color-dodge': '覆い焼きカラー',
+            'color-burn': '焼き込みカラー',
+            'hard-light': 'ハードライト',
+            'soft-light': 'ソフトライト',
+            'difference': '差の絶対値',
+            'exclusion': '除外',
+            'hue': '色相',
+            'saturation': '彩度',
+            'color': 'カラー',
+            'luminosity': '輝度',
+            'lighter': '加算'
+        };
+        return modeNames[mode] || mode;
+    }
+    
+    // ブレンドモードを設定
+    setBlendMode(mode) {
+        if (!this.selectedClip) return;
+        
+        this.selectedClip.blendMode = mode;
+        this.updatePropertiesPanel();
+        this.updatePreview();
+        this.saveHistory('ブレンドモード変更');
     }
     
     // clipBがclipAの子孫かどうかを判定
@@ -3725,7 +3673,14 @@ class StarlitTimelineApp {
         // クリッピングを適用（一時キャンバスにマスク適用後、メインキャンバスに描画）
         if (clip.clipSource && tempCanvas) {
             this.clippingManager.applyClipping(targetCtx, clip, this.currentTime);
+            
+            // メインキャンバスに描画する際もブレンドモードを適用
+            ctx.save();
+            if (clip.blendMode && clip.blendMode !== 'normal') {
+                ctx.globalCompositeOperation = clip.blendMode;
+            }
             ctx.drawImage(tempCanvas, 0, 0);
+            ctx.restore();
         }
     }
     
@@ -5862,6 +5817,108 @@ class StarlitTimelineApp {
     
     loadEffectSettings() {
         document.getElementById('effectSettingsInput').click();
+    }
+    
+    // クリップエフェクトの設定を保存
+    saveClipEffectSettings() {
+        if (!this.selectedClip) {
+            alert('クリップを選択してください');
+            return;
+        }
+        
+        const clip = this.selectedClip;
+        const settings = {
+            version: '1.0',
+            type: 'clip_effect_settings',
+            timestamp: new Date().toISOString(),
+            clipEffects: {
+                transitionIn: clip.transitionIn,
+                transitionOut: clip.transitionOut,
+                puppet: clip.puppet,
+                windShake: clip.windShake,
+                gaussianBlur: clip.gaussianBlur,
+                lensBlur: clip.lensBlur
+            }
+        };
+        
+        const blob = new Blob([JSON.stringify(settings, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        
+        const date = new Date();
+        const dateStr = date.toISOString().slice(0, 19).replace(/:/g, '-');
+        a.download = `clip_effect_settings_${dateStr}.json`;
+        
+        a.click();
+        URL.revokeObjectURL(url);
+        
+        this.showNotification('💾 クリップエフェクト設定を保存しました');
+    }
+    
+    // クリップエフェクトの設定を読込
+    loadClipEffectSettings() {
+        if (!this.selectedClip) {
+            alert('クリップを選択してください');
+            return;
+        }
+        
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+        input.onchange = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    const settings = JSON.parse(event.target.result);
+                    
+                    if (settings.type !== 'clip_effect_settings') {
+                        alert('クリップエフェクト設定ファイルではありません');
+                        return;
+                    }
+                    
+                    const clip = this.selectedClip;
+                    
+                    // エフェクト設定を適用
+                    if (settings.clipEffects.transitionIn) {
+                        clip.transitionIn = settings.clipEffects.transitionIn;
+                    }
+                    if (settings.clipEffects.transitionOut) {
+                        clip.transitionOut = settings.clipEffects.transitionOut;
+                    }
+                    if (settings.clipEffects.puppet) {
+                        clip.puppet = settings.clipEffects.puppet;
+                    }
+                    if (settings.clipEffects.windShake) {
+                        clip.windShake = settings.clipEffects.windShake;
+                    }
+                    if (settings.clipEffects.gaussianBlur) {
+                        clip.gaussianBlur = settings.clipEffects.gaussianBlur;
+                    }
+                    if (settings.clipEffects.lensBlur) {
+                        clip.lensBlur = settings.clipEffects.lensBlur;
+                    }
+                    
+                    this.updatePreview();
+                    this.showNotification('📂 クリップエフェクト設定を読み込みました');
+                    
+                    // ウィンドウが開いている場合は再描画
+                    const effectWindow = document.getElementById('clipEffectTabWindow');
+                    if (effectWindow) {
+                        effectWindow.remove();
+                        this.openClipEffectWindow();
+                    }
+                } catch (error) {
+                    console.error('設定読込エラー:', error);
+                    alert('設定ファイルの読み込みに失敗しました');
+                }
+            };
+            reader.readAsText(file);
+        };
+        input.click();
     }
     
     handleEffectSettingsLoad(event) {
@@ -8611,6 +8668,344 @@ class StarlitTimelineApp {
         this.openEditorWindow('clipEffect');
     }
     
+    // タブ切り替え可能なクリップエフェクトウィンドウを開く
+    openClipEffectWindow() {
+        const windowId = 'clipEffectTabWindow';
+        
+        // 既存のウィンドウがあれば閉じる
+        const existingWindow = document.getElementById(windowId);
+        if (existingWindow) {
+            existingWindow.remove();
+            return;
+        }
+        
+        if (!this.selectedClip) {
+            alert('クリップを選択してください');
+            return;
+        }
+        
+        const clip = this.selectedClip;
+        
+        // ウィンドウを作成
+        const window = document.createElement('div');
+        window.id = windowId;
+        window.className = 'effect-editor-window visible';
+        window.style.left = '100px';
+        window.style.top = '50px';
+        window.style.width = '600px';
+        window.style.height = '900px';
+        
+        // ヘッダー
+        const header = document.createElement('div');
+        header.className = 'effect-editor-header';
+        header.style.display = 'flex';
+        header.style.alignItems = 'center';
+        header.style.gap = '8px';
+        
+        const title = document.createElement('div');
+        title.className = 'effect-editor-title';
+        title.textContent = '✨ Effect';
+        title.style.flex = '1';
+        
+        // 保存ボタン
+        const saveBtn = document.createElement('button');
+        saveBtn.className = 'round-button small';
+        saveBtn.textContent = '💾';
+        saveBtn.title = 'エフェクト設定を保存';
+        saveBtn.onclick = (e) => {
+            e.stopPropagation();
+            this.saveClipEffectSettings();
+        };
+        saveBtn.style.cssText = 'padding: 6px 10px; background: var(--chocolate-main); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;';
+        
+        // 読込ボタン
+        const loadBtn = document.createElement('button');
+        loadBtn.className = 'round-button small';
+        loadBtn.textContent = '📂';
+        loadBtn.title = 'エフェクト設定を読込';
+        loadBtn.onclick = (e) => {
+            e.stopPropagation();
+            this.loadClipEffectSettings();
+        };
+        loadBtn.style.cssText = 'padding: 6px 10px; background: var(--chocolate-main); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;';
+        
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'effect-editor-close';
+        closeBtn.textContent = '×';
+        closeBtn.onclick = () => window.remove();
+        
+        header.appendChild(title);
+        header.appendChild(saveBtn);
+        header.appendChild(loadBtn);
+        header.appendChild(closeBtn);
+        
+        // タブエリア
+        const tabArea = document.createElement('div');
+        tabArea.style.cssText = 'display: flex; background: var(--chocolate-dark); border-bottom: 2px solid var(--chocolate-darker); overflow-x: auto;';
+        
+        const tabs = [
+            { id: 'transition', label: '🎬 トランジション', icon: '🎬' },
+            { id: 'puppet', label: '🎭 パペット', icon: '🎭' },
+            { id: 'windShake', label: '🍃 風揺れ', icon: '🍃' },
+            { id: 'blur', label: '🌫️ ブラー', icon: '🌫️' }
+        ];
+        
+        tabs.forEach((tab, index) => {
+            const tabBtn = document.createElement('button');
+            tabBtn.className = 'effect-tab-button';
+            if (index === 0) tabBtn.classList.add('active');
+            tabBtn.textContent = tab.label;
+            tabBtn.onclick = () => {
+                document.querySelectorAll('.effect-tab-button').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.effect-tab-content').forEach(c => c.style.display = 'none');
+                tabBtn.classList.add('active');
+                document.getElementById(`tab-${tab.id}`).style.display = 'block';
+            };
+            tabBtn.style.cssText = 'flex: 1; padding: 12px; background: transparent; color: var(--biscuit-light); border: none; cursor: pointer; font-size: 13px; transition: all 0.2s; white-space: nowrap;';
+            tabArea.appendChild(tabBtn);
+        });
+        
+        // コンテンツエリア
+        const content = document.createElement('div');
+        content.className = 'effect-editor-content';
+        content.style.padding = '16px';
+        
+        // トランジションタブ
+        const transitionTab = this.createTransitionTabContent(clip);
+        transitionTab.id = 'tab-transition';
+        transitionTab.className = 'effect-tab-content';
+        transitionTab.style.display = 'block';
+        
+        // パペットタブ
+        const puppetTab = this.createPuppetTabContent(clip);
+        puppetTab.id = 'tab-puppet';
+        puppetTab.className = 'effect-tab-content';
+        puppetTab.style.display = 'none';
+        
+        // 風揺れタブ
+        const windShakeTab = this.createWindShakeTabContent(clip);
+        windShakeTab.id = 'tab-windShake';
+        windShakeTab.className = 'effect-tab-content';
+        windShakeTab.style.display = 'none';
+        
+        // ブラータブ
+        const blurTab = this.createBlurTabContent(clip);
+        blurTab.id = 'tab-blur';
+        blurTab.className = 'effect-tab-content';
+        blurTab.style.display = 'none';
+        
+        content.appendChild(transitionTab);
+        content.appendChild(puppetTab);
+        content.appendChild(windShakeTab);
+        content.appendChild(blurTab);
+        
+        // リサイズハンドル
+        const resizeHandle = document.createElement('div');
+        resizeHandle.className = 'effect-editor-resize-handle';
+        
+        window.appendChild(header);
+        window.appendChild(tabArea);
+        window.appendChild(content);
+        window.appendChild(resizeHandle);
+        
+        document.body.appendChild(window);
+        
+        // ドラッグ機能
+        this.makeWindowDraggable(window, header);
+        
+        // リサイズ機能
+        this.makeWindowResizable(window, resizeHandle);
+        
+        // CSSスタイルを追加（タブボタン用）
+        if (!document.getElementById('effect-tab-styles')) {
+            const style = document.createElement('style');
+            style.id = 'effect-tab-styles';
+            style.textContent = `
+                .effect-tab-button:hover {
+                    background: rgba(255, 255, 255, 0.1) !important;
+                }
+                .effect-tab-button.active {
+                    background: var(--accent-orange) !important;
+                    font-weight: bold;
+                }
+            `;
+            document.head.appendChild(style);
+        }
+    }
+    
+    // トランジションタブのコンテンツを作成
+    createTransitionTabContent(clip) {
+        const div = document.createElement('div');
+        div.innerHTML = `
+            <h3 style="margin: 0 0 12px 0; color: var(--biscuit-light);">トランジションイン</h3>
+            <div class="property-group">
+                <div class="property-label">タイプ</div>
+                <select onchange="app.updateTransition('in', 'type', this.value)" style="width: 100%; padding: 8px;">
+                    <option value="none" ${clip.transitionIn.type === 'none' ? 'selected' : ''}>なし</option>
+                    <option value="fade" ${clip.transitionIn.type === 'fade' ? 'selected' : ''}>フェード</option>
+                    <option value="slide-left" ${clip.transitionIn.type === 'slide-left' ? 'selected' : ''}>スライド (左から)</option>
+                    <option value="slide-right" ${clip.transitionIn.type === 'slide-right' ? 'selected' : ''}>スライド (右から)</option>
+                    <option value="slide-up" ${clip.transitionIn.type === 'slide-up' ? 'selected' : ''}>スライド (下から)</option>
+                    <option value="slide-down" ${clip.transitionIn.type === 'slide-down' ? 'selected' : ''}>スライド (上から)</option>
+                    <option value="zoom" ${clip.transitionIn.type === 'zoom' ? 'selected' : ''}>ズーム</option>
+                </select>
+            </div>
+            <div class="property-group">
+                <div class="property-label">継続時間: <span id="transitionInDuration">${clip.transitionIn.duration.toFixed(2)}</span>秒</div>
+                <input type="range" class="property-slider" value="${clip.transitionIn.duration}" 
+                    min="0.1" max="3" step="0.1"
+                    oninput="document.getElementById('transitionInDuration').textContent = parseFloat(this.value).toFixed(2); app.updateTransition('in', 'duration', parseFloat(this.value))">
+            </div>
+            
+            <h3 style="margin: 24px 0 12px 0; color: var(--biscuit-light);">トランジションアウト</h3>
+            <div class="property-group">
+                <div class="property-label">タイプ</div>
+                <select onchange="app.updateTransition('out', 'type', this.value)" style="width: 100%; padding: 8px;">
+                    <option value="none" ${clip.transitionOut.type === 'none' ? 'selected' : ''}>なし</option>
+                    <option value="fade" ${clip.transitionOut.type === 'fade' ? 'selected' : ''}>フェード</option>
+                    <option value="slide-left" ${clip.transitionOut.type === 'slide-left' ? 'selected' : ''}>スライド (左へ)</option>
+                    <option value="slide-right" ${clip.transitionOut.type === 'slide-right' ? 'selected' : ''}>スライド (右へ)</option>
+                    <option value="slide-up" ${clip.transitionOut.type === 'slide-up' ? 'selected' : ''}>スライド (上へ)</option>
+                    <option value="slide-down" ${clip.transitionOut.type === 'slide-down' ? 'selected' : ''}>スライド (下へ)</option>
+                    <option value="zoom" ${clip.transitionOut.type === 'zoom' ? 'selected' : ''}>ズーム</option>
+                </select>
+            </div>
+            <div class="property-group">
+                <div class="property-label">継続時間: <span id="transitionOutDuration">${clip.transitionOut.duration.toFixed(2)}</span>秒</div>
+                <input type="range" class="property-slider" value="${clip.transitionOut.duration}" 
+                    min="0.1" max="3" step="0.1"
+                    oninput="document.getElementById('transitionOutDuration').textContent = parseFloat(this.value).toFixed(2); app.updateTransition('out', 'duration', parseFloat(this.value))">
+            </div>
+        `;
+        return div;
+    }
+    
+    // パペットタブのコンテンツを作成（簡易版、詳細は既存のUIを参照）
+    createPuppetTabContent(clip) {
+        const div = document.createElement('div');
+        div.innerHTML = `
+            <div class="property-group">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" ${clip.puppet?.enabled ? 'checked' : ''} onchange="app.togglePuppetEffect(this.checked)">
+                    <span style="font-weight: bold;">パペットアニメーション有効化</span>
+                </label>
+            </div>
+            ${clip.puppet?.enabled ? `
+                <div style="background: rgba(210, 105, 30, 0.2); padding: 12px; margin: 12px 0; border-radius: 4px; font-size: 12px; line-height: 1.5;">
+                    💡 プレビュー画面で素材をクリックしてピンを配置してください。<br>
+                    ピンをドラッグして変形させることができます。
+                </div>
+                <div class="property-group">
+                    <button onclick="app.togglePuppetEditMode()" style="width: 100%; padding: 12px; background: ${this.isPuppetEditMode ? '#FF4444' : 'var(--accent-orange)'}; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                        ${this.isPuppetEditMode ? '✅ 編集モード中 (クリックで終了)' : '✏️ 編集モード開始'}
+                    </button>
+                </div>
+                <div class="property-group">
+                    <div class="property-label">ピン数: ${clip.puppet.pins.length}</div>
+                </div>
+                <div class="property-group">
+                    <div class="property-label">硬さ: <span id="puppetStiffness">${((clip.puppet.stiffness || 0.5) * 100).toFixed(0)}%</span></div>
+                    <input type="range" class="property-slider" value="${(clip.puppet.stiffness || 0.5) * 100}" 
+                        min="0" max="100" step="1"
+                        oninput="document.getElementById('puppetStiffness').textContent = this.value + '%'; app.updatePuppetStiffness(parseFloat(this.value) / 100)">
+                </div>
+                <div class="property-group">
+                    <button onclick="app.clearAllPuppetPins()" style="width: 100%; padding: 10px; background: var(--chocolate-dark); color: white; border: none; border-radius: 4px; cursor: pointer;">
+                        🗑️ 全ピンクリア
+                    </button>
+                </div>
+            ` : ''}
+        `;
+        return div;
+    }
+    
+    // 風揺れタブのコンテンツを作成（簡易版）
+    createWindShakeTabContent(clip) {
+        const div = document.createElement('div');
+        div.innerHTML = `
+            <div class="property-group">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" ${clip.windShake?.enabled ? 'checked' : ''} onchange="app.toggleWindShake(this.checked)">
+                    <span style="font-weight: bold;">風揺れエフェクト有効化</span>
+                </label>
+            </div>
+            ${clip.windShake?.enabled ? `
+                <div style="max-height: 700px; overflow-y: auto; padding-right: 8px;">
+                    <div class="property-group">
+                        <div class="property-label">分割数: <span id="windDivisions">${clip.windShake.divisions}</span></div>
+                        <input type="range" class="property-slider" value="${clip.windShake.divisions}" 
+                            min="1" max="50" step="1"
+                            oninput="document.getElementById('windDivisions').textContent = this.value"
+                            onchange="app.updateWindShakeProperty('divisions', parseInt(this.value))">
+                    </div>
+                    <div class="property-group">
+                        <div class="property-label">揺れ角: <span id="windAngle">${clip.windShake.angle}°</span></div>
+                        <input type="range" class="property-slider" value="${clip.windShake.angle}" 
+                            min="0" max="360" step="1"
+                            oninput="document.getElementById('windAngle').textContent = this.value + '°'"
+                            onchange="app.updateWindShakeProperty('angle', parseFloat(this.value))">
+                    </div>
+                    <div class="property-group">
+                        <div class="property-label">周期: <span id="windPeriod">${clip.windShake.period}秒</span></div>
+                        <input type="range" class="property-slider" value="${clip.windShake.period}" 
+                            min="0.01" max="10" step="0.01"
+                            oninput="document.getElementById('windPeriod').textContent = parseFloat(this.value).toFixed(2) + '秒'"
+                            onchange="app.updateWindShakeProperty('period', parseFloat(this.value))">
+                    </div>
+                </div>
+            ` : ''}
+        `;
+        return div;
+    }
+    
+    // ブラータブのコンテンツを作成
+    createBlurTabContent(clip) {
+        const div = document.createElement('div');
+        div.innerHTML = `
+            <h3 style="margin: 0 0 12px 0; color: var(--biscuit-light);">🌫️ ガウシアンブラー</h3>
+            <div class="property-group">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" ${clip.gaussianBlur?.enabled ? 'checked' : ''} onchange="app.toggleGaussianBlur(this.checked)">
+                    <span>有効化</span>
+                </label>
+            </div>
+            ${clip.gaussianBlur?.enabled ? `
+                <div class="property-group">
+                    <div class="property-label">強度: <span id="gaussianStrength">${clip.gaussianBlur.strength}</span></div>
+                    <input type="range" class="property-slider" value="${clip.gaussianBlur.strength}" 
+                        min="0" max="50" step="1"
+                        oninput="document.getElementById('gaussianStrength').textContent = this.value"
+                        onchange="app.updateGaussianBlurProperty('strength', parseInt(this.value))">
+                </div>
+            ` : ''}
+            
+            <h3 style="margin: 24px 0 12px 0; color: var(--biscuit-light);">📷 レンズブラー</h3>
+            <div class="property-group">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" ${clip.lensBlur?.enabled ? 'checked' : ''} onchange="app.toggleLensBlur(this.checked)">
+                    <span>有効化</span>
+                </label>
+            </div>
+            ${clip.lensBlur?.enabled ? `
+                <div class="property-group">
+                    <div class="property-label">強度: <span id="lensStrength">${clip.lensBlur.strength}</span></div>
+                    <input type="range" class="property-slider" value="${clip.lensBlur.strength}" 
+                        min="0" max="100" step="1"
+                        oninput="document.getElementById('lensStrength').textContent = this.value"
+                        onchange="app.updateLensBlurProperty('strength', parseInt(this.value))">
+                </div>
+                <div class="property-group">
+                    <div class="property-label">フォーカス位置: <span id="lensFocus">${clip.lensBlur.focusPosition}%</span></div>
+                    <input type="range" class="property-slider" value="${clip.lensBlur.focusPosition}" 
+                        min="0" max="100" step="1"
+                        oninput="document.getElementById('lensFocus').textContent = this.value + '%'"
+                        onchange="app.updateLensBlurProperty('focusPosition', parseInt(this.value))">
+                </div>
+            ` : ''}
+        `;
+        return div;
+    }
+    
     // 個別のエフェクト詳細ウィンドウを開く
     openEffectDetailWindow(effectType) {
         const windowId = `effectDetailWindow_${effectType}`;
@@ -8678,7 +9073,7 @@ class StarlitTimelineApp {
         window.style.left = '100px';
         window.style.top = '100px';
         window.style.width = '500px';
-        window.style.height = '600px';
+        window.style.height = '900px';
         
         // ヘッダー
         const header = document.createElement('div');
@@ -8773,7 +9168,7 @@ class StarlitTimelineApp {
         window.style.left = '100px';
         window.style.top = '100px';
         window.style.width = '500px';
-        window.style.height = '600px';
+        window.style.height = '900px';
         
         // ヘッダー
         const header = document.createElement('div');

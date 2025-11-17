@@ -194,24 +194,23 @@
                 </div>
             </div>
 
-            <!-- 右サイドバー: プロパティ＆エフェクト -->
+            <!-- 右サイドバー: プロパティ -->
             <div class="sidebar right-sidebar">
                 <div class="properties-panel">
                     <div class="sidebar-header">
                         <h3>⚙️ プロパティ</h3>
+                        <button class="round-button" onclick="app.openClipEffectWindow()" title="エフェクト編集" style="background: var(--accent-orange); font-size: 16px;">✨</button>
                     </div>
                     <div id="propertiesContent" class="properties-content">
                         <div class="empty-message">クリップを選択してください</div>
                     </div>
                 </div>
 
-                <div class="effects-panel">
+                <div class="effects-panel" style="display: none;">
                     <div class="sidebar-header">
                         <h3>✨ エフェクト</h3>
                         <div class="header-controls">
                             <button class="round-button small" onclick="app.openEffectEditor()" title="別ウィンドウで編集">➕</button>
-                            <button class="round-button small" onclick="app.saveEffectSettings()" title="エフェクト設定を保存">💾</button>
-                            <button class="round-button small" onclick="app.loadEffectSettings()" title="エフェクト設定を読込">📂</button>
                         </div>
                     </div>
                     <div class="effects-content">
