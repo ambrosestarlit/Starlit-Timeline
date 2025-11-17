@@ -168,14 +168,28 @@
                         </button>
                     </div>
 
-                    <!-- タイムライン定規 -->
-                    <div class="timeline-ruler">
-                        <canvas id="rulerCanvas" height="30"></canvas>
+                    <!-- タイムライン定規エリア -->
+                    <div class="timeline-ruler-area">
+                        <!-- 左側のスペーサー（トラックパネルと同じ幅） -->
+                        <div class="track-panel-spacer"></div>
+                        
+                        <!-- タイムライン定規 -->
+                        <div class="timeline-ruler">
+                            <canvas id="rulerCanvas" height="30"></canvas>
+                        </div>
                     </div>
 
-                    <!-- タイムラインキャンバス -->
-                    <div class="timeline-scroll" id="timelineScroll">
-                        <canvas id="timelineCanvas" width="3000" height="500"></canvas>
+                    <!-- タイムラインとトラックパネルのコンテナ -->
+                    <div class="timeline-with-tracks">
+                        <!-- トラックパネル（左側） -->
+                        <div class="track-panel" id="trackPanel">
+                            <!-- トラック名がここに動的に生成される -->
+                        </div>
+                        
+                        <!-- タイムラインキャンバス（右側） -->
+                        <div class="timeline-scroll" id="timelineScroll">
+                            <canvas id="timelineCanvas" width="3000" height="500"></canvas>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -737,6 +751,8 @@
 
     <!-- JSZip ライブラリ -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <!-- クリッピング機能モジュール -->
+    <script src="clipping.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

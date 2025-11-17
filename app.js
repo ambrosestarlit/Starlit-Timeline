@@ -13,8 +13,15 @@ class StarlitTimelineApp {
         this.fps = 30;
         this.duration = 30; // seconds
         
+        // トラック名（デフォルトはTrack 1, Track 2...）
+        this.trackNames = Array.from({ length: this.trackCount }, (_, i) => `Track ${i + 1}`);
+        
         // updatePreview実行中フラグ（重複実行防止）
         this.isUpdatingPreview = false;
+        
+        // updatePreviewデバウンス用タイマー（ドラッグ時のパフォーマンス向上）
+        this.previewUpdateTimer = null;
+        this.previewUpdateDelay = 4; // 4ms (約240FPS相当) - より滑らかなドラッグ操作
         
         // キャンバス
         this.previewCanvas = document.getElementById('previewCanvas');
@@ -124,7 +131,8 @@ class StarlitTimelineApp {
         this.propertySectionStates = {
             transform: false,
             transition: false,
-            audio: false
+            audio: false,
+            clipping: false
         };
         
         // AEプロパティの開閉状態を保持
@@ -195,6 +203,10 @@ class StarlitTimelineApp {
         this.ffmpeg = null;
         this.ffmpegLoaded = false;
         
+        // クリッピングマネージャーを初期化
+        this.clippingManager = new ClippingManager(this);
+        this.clippingManager.initPropertySectionStates();
+        
         this.init();
     }
     
@@ -203,9 +215,14 @@ class StarlitTimelineApp {
         this.loadSettingsFromCache();
         
         this.setupEventListeners();
-        this.updateTimelineSize();
-        this.drawTimeline();
-        this.drawRuler();
+        
+        // DOMの読み込みを待ってから描画
+        setTimeout(() => {
+            this.updateTimelineSize();
+            this.drawTimeline();
+            this.drawRuler();
+        }, 100);
+        
         this.updatePreview();
         
         // ズームスライダー
@@ -274,6 +291,16 @@ class StarlitTimelineApp {
         // 素材エクスプローラーのドラッグ&ドロップ
         document.getElementById('assetExplorer').addEventListener('drop', (e) => this.handleAssetDrop(e));
         document.getElementById('assetExplorer').addEventListener('dragover', (e) => e.preventDefault());
+        
+        // タイムラインスクロールとトラックパネルのスクロール同期
+        const trackPanel = document.getElementById('trackPanel');
+        
+        if (timelineScroll && trackPanel) {
+            timelineScroll.addEventListener('scroll', () => {
+                trackPanel.scrollTop = timelineScroll.scrollTop;
+                this.drawRuler(); // ルーラーを再描画
+            });
+        }
         
         // パペットUIイベントリスナー
         this.setupPuppetEventListeners();
@@ -1308,7 +1335,8 @@ class StarlitTimelineApp {
                 x: 0.5,  // 0-1 (画像の中心が0.5)
                 y: 0.5   // 0-1 (画像の中心が0.5)
             },
-            blendMode: 'normal'  // ブレンドモード
+            blendMode: 'normal',  // ブレンドモード
+            clipSource: null  // クリッピングソース
         };
         
         // 連番アセットの場合
@@ -1414,7 +1442,56 @@ class StarlitTimelineApp {
         this.timelineCanvas.width = width;
         this.timelineCanvas.height = height;
         
-        this.rulerCanvas.width = this.rulerCanvas.parentElement.clientWidth;
+        // ルーラーの親要素の幅を取得
+        const rulerParent = this.rulerCanvas.parentElement;
+        if (rulerParent) {
+            this.rulerCanvas.width = rulerParent.clientWidth;
+        }
+        
+        // トラックパネルを更新
+        this.updateTrackPanel();
+    }
+    
+    // トラックパネルを更新
+    updateTrackPanel() {
+        const trackPanel = document.getElementById('trackPanel');
+        if (!trackPanel) return;
+        
+        trackPanel.innerHTML = '';
+        
+        // トラック名が足りない場合は追加
+        while (this.trackNames.length < this.trackCount) {
+            this.trackNames.push(`Track ${this.trackNames.length + 1}`);
+        }
+        
+        for (let i = 0; i < this.trackCount; i++) {
+            const trackItem = document.createElement('div');
+            trackItem.className = 'track-item';
+            
+            const trackNumber = document.createElement('div');
+            trackNumber.className = 'track-number';
+            trackNumber.textContent = `Track ${i + 1}`;
+            
+            const trackNameInput = document.createElement('input');
+            trackNameInput.type = 'text';
+            trackNameInput.className = 'track-name-input';
+            trackNameInput.value = this.trackNames[i];
+            trackNameInput.placeholder = `Track ${i + 1}`;
+            trackNameInput.dataset.trackIndex = i;
+            
+            trackNameInput.addEventListener('input', (e) => {
+                const trackIndex = parseInt(e.target.dataset.trackIndex);
+                this.trackNames[trackIndex] = e.target.value;
+            });
+            
+            trackNameInput.addEventListener('blur', () => {
+                this.saveHistory();
+            });
+            
+            trackItem.appendChild(trackNumber);
+            trackItem.appendChild(trackNameInput);
+            trackPanel.appendChild(trackItem);
+        }
     }
     
     drawTimeline() {
@@ -1452,6 +1529,9 @@ class StarlitTimelineApp {
         this.clips.forEach(clip => {
             this.drawClip(clip);
         });
+        
+        // 親子関係の線を描画
+        this.drawParentingLines();
         
         // 再生ヘッド
         this.drawPlayhead();
@@ -1792,6 +1872,77 @@ class StarlitTimelineApp {
                 bearSize
             );
         }
+    }
+    
+    // 親子関係の線を描画
+    drawParentingLines() {
+        const ctx = this.timelineCtx;
+        
+        this.clips.forEach(clip => {
+            if (clip.parentId) {
+                const parent = this.clips.find(c => c.id === clip.parentId);
+                if (!parent) return;
+                
+                // 親クリップの中心位置
+                const parentX = parent.startTime * this.zoom + (parent.duration * this.zoom) / 2;
+                const parentY = parent.track * this.trackHeight + this.trackHeight / 2;
+                
+                // 子クリップの中心位置
+                const childX = clip.startTime * this.zoom + (clip.duration * this.zoom) / 2;
+                const childY = clip.track * this.trackHeight + this.trackHeight / 2;
+                
+                // ベジェ曲線で親子を結ぶ
+                ctx.save();
+                ctx.strokeStyle = '#FFD700';
+                ctx.lineWidth = 3;
+                ctx.setLineDash([5, 5]);
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+                ctx.shadowBlur = 4;
+                
+                ctx.beginPath();
+                ctx.moveTo(parentX, parentY);
+                
+                // 制御点を計算（少し曲線を描く）
+                const controlPointOffset = Math.abs(childY - parentY) * 0.5;
+                ctx.bezierCurveTo(
+                    parentX, parentY + controlPointOffset,
+                    childX, childY - controlPointOffset,
+                    childX, childY
+                );
+                
+                ctx.stroke();
+                ctx.setLineDash([]);
+                
+                // 矢印を描画（子クリップ側）
+                const arrowSize = 8;
+                const angle = Math.atan2(childY - parentY, childX - parentX);
+                
+                ctx.fillStyle = '#FFD700';
+                ctx.beginPath();
+                ctx.moveTo(childX, childY);
+                ctx.lineTo(
+                    childX - arrowSize * Math.cos(angle - Math.PI / 6),
+                    childY - arrowSize * Math.sin(angle - Math.PI / 6)
+                );
+                ctx.lineTo(
+                    childX - arrowSize * Math.cos(angle + Math.PI / 6),
+                    childY - arrowSize * Math.sin(angle + Math.PI / 6)
+                );
+                ctx.closePath();
+                ctx.fill();
+                
+                // 親クリップ側に小さな丸を描画
+                ctx.beginPath();
+                ctx.arc(parentX, parentY, 4, 0, Math.PI * 2);
+                ctx.fillStyle = '#FFD700';
+                ctx.fill();
+                ctx.strokeStyle = '#8B7355';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                
+                ctx.restore();
+            }
+        });
     }
     
     drawRuler() {
@@ -2317,6 +2468,45 @@ class StarlitTimelineApp {
             const currentOpacity = this.getKeyframeValue(clip, 'opacity', localTime);
             const currentScale = this.getKeyframeValue(clip, 'scale', localTime);
             
+            // 親クリップの名前を取得
+            let parentClipName = 'なし';
+            if (clip.parentId) {
+                const parentClip = this.clips.find(c => c.id === clip.parentId);
+                if (parentClip) {
+                    parentClipName = parentClip.asset.name;
+                }
+            }
+            
+            // クリッピングセクション
+            propertiesHTML += this.clippingManager.generateClippingHTML(clip);
+            
+            // 親子関係セクション
+            propertiesHTML += `
+                <div class="property-section-header" onclick="app.togglePropertySection('parenting')">
+                    <span class="section-toggle-icon" id="parentingToggle">▶</span>
+                    🔗 親子関係
+                </div>
+                <div class="property-section-content collapsed" id="parentingContent">
+                    <div class="ae-property-group">
+                        <div class="ae-property-header">
+                            <span class="ae-property-name">👪 親クリップ</span>
+                            <span class="ae-property-value" style="font-size: 11px; color: ${clip.parentId ? '#FFD700' : '#999'};">${parentClipName}</span>
+                        </div>
+                        <div class="ae-property-content" style="padding: 10px; display: block;">
+                            <select id="parentClipSelect" class="property-slider" style="width: 100%; padding: 8px; margin-bottom: 8px; background: var(--chocolate-main); color: var(--biscuit-light); border: 1px solid var(--chocolate-dark); border-radius: 4px;">
+                                <option value="">なし (独立)</option>
+                            </select>
+                            <button class="small-button" onclick="app.setParentClip()" style="width: 100%; margin-bottom: 4px; padding: 8px; background: var(--accent-orange); color: white; border: none; border-radius: 4px; cursor: pointer;">
+                                🔗 親を設定
+                            </button>
+                            <button class="small-button" onclick="app.removeParentClip()" style="width: 100%; padding: 8px; background: var(--chocolate-dark); color: white; border: none; border-radius: 4px; cursor: pointer;">
+                                ✂️ 親子関係を解除
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
             propertiesHTML += `
                 <div class="property-section-header" onclick="app.togglePropertySection('transform')">
                     <span class="section-toggle-icon" id="transformToggle">▼</span>
@@ -2604,6 +2794,20 @@ class StarlitTimelineApp {
         
         // アンカーポイントUIの更新
         this.updateAnchorPointUI();
+        
+        // 親子関係UIの更新（選択肢を追加）
+        if (this.selectedClip && (this.selectedClip.asset.type === 'image' || this.selectedClip.asset.type === 'video' || 
+            this.selectedClip.asset.type === 'sequence' || this.selectedClip.asset.type === 'solid' || 
+            this.selectedClip.asset.type === 'gradient' || this.selectedClip.asset.type === 'stripe')) {
+            this.updateParentingUI();
+        }
+        
+        // クリッピングUIの更新（選択肢を追加）
+        if (this.selectedClip && (this.selectedClip.asset.type === 'image' || this.selectedClip.asset.type === 'video' || 
+            this.selectedClip.asset.type === 'sequence' || this.selectedClip.asset.type === 'solid' || 
+            this.selectedClip.asset.type === 'gradient' || this.selectedClip.asset.type === 'stripe')) {
+            this.clippingManager.updateClipSourceSelect(this.selectedClip);
+        }
     }
     
     // 風揺れUIの更新
@@ -2694,6 +2898,12 @@ class StarlitTimelineApp {
             document.getElementById('lensBlurStrengthValue').textContent = lb.strength || 30;
             document.getElementById('lensBlurInvert').checked = lb.invert || false;
         }
+        
+        // 親子関係UIを更新
+        this.updateParentingUI();
+        
+        // クリッピングUIを更新
+        this.updateClippingUI();
     }
     
     // クリップエフェクトの折りたたみ
@@ -2702,6 +2912,193 @@ class StarlitTimelineApp {
         if (controls) {
             controls.style.display = controls.style.display === 'none' ? 'block' : 'none';
         }
+    }
+    
+    // 親子関係UIの更新
+    updateParentingUI() {
+        if (!this.selectedClip) return;
+        
+        const parentClipSelect = document.getElementById('parentClipSelect');
+        if (!parentClipSelect) return;
+        
+        // 親クリップの選択肢を更新
+        parentClipSelect.innerHTML = '<option value="">なし (独立)</option>';
+        
+        this.clips.forEach(clip => {
+            // 自分自身と、自分の子孫は親に設定できない
+            if (clip.id === this.selectedClip.id || this.isDescendantOf(this.selectedClip.id, clip.id)) {
+                return;
+            }
+            
+            const option = document.createElement('option');
+            option.value = clip.id;
+            option.textContent = `${clip.asset.name} (Track ${clip.track + 1})`;
+            
+            if (this.selectedClip.parentId === clip.id) {
+                option.selected = true;
+            }
+            
+            parentClipSelect.appendChild(option);
+        });
+    }
+    
+    // クリッピングUIの更新
+    updateClippingUI() {
+        if (!this.selectedClip) return;
+        
+        const clipSourceSelect = document.getElementById('clipSourceSelect');
+        if (!clipSourceSelect) return;
+        
+        // クリップソースの選択肢を更新
+        clipSourceSelect.innerHTML = '<option value="">なし</option>';
+        
+        this.clips.forEach(clip => {
+            // 自分自身と、自分より上または同じトラックは除外（下のトラックのみ選択可能）
+            if (clip.id === this.selectedClip.id) {
+                return;
+            }
+            if (clip.track >= this.selectedClip.track) {
+                return;
+            }
+            
+            const option = document.createElement('option');
+            option.value = clip.id;
+            option.textContent = `${clip.asset.name} (Track ${clip.track + 1})`;
+            
+            if (this.selectedClip.clipSource == clip.id) {
+                option.selected = true;
+            }
+            
+            clipSourceSelect.appendChild(option);
+        });
+    }
+    
+    // 親クリップを設定
+    setParentClip() {
+        if (!this.selectedClip) return;
+        
+        const parentClipSelect = document.getElementById('parentClipSelect');
+        const selectedParentId = parentClipSelect.value;
+        
+        // 古い親から子を削除
+        if (this.selectedClip.parentId) {
+            const oldParent = this.clips.find(c => c.id === this.selectedClip.parentId);
+            if (oldParent && oldParent.childrenIds) {
+                oldParent.childrenIds = oldParent.childrenIds.filter(id => id !== this.selectedClip.id);
+            }
+        }
+        
+        // 新しい親を設定
+        if (selectedParentId) {
+            const parentClip = this.clips.find(c => c.id === Number(selectedParentId));
+            if (parentClip) {
+                this.selectedClip.parentId = parentClip.id;
+                
+                // 親の子リストに追加
+                if (!parentClip.childrenIds) {
+                    parentClip.childrenIds = [];
+                }
+                if (!parentClip.childrenIds.includes(this.selectedClip.id)) {
+                    parentClip.childrenIds.push(this.selectedClip.id);
+                }
+            }
+        } else {
+            this.selectedClip.parentId = null;
+        }
+        
+        this.updatePropertiesPanel();
+        this.updatePreview();
+        this.drawTimeline();
+        this.saveHistory();
+    }
+    
+    // 親子関係を解除
+    removeParentClip() {
+        if (!this.selectedClip) return;
+        
+        // 親から子を削除
+        if (this.selectedClip.parentId) {
+            const parent = this.clips.find(c => c.id === this.selectedClip.parentId);
+            if (parent && parent.childrenIds) {
+                parent.childrenIds = parent.childrenIds.filter(id => id !== this.selectedClip.id);
+            }
+            this.selectedClip.parentId = null;
+        }
+        
+        // 全ての子の親を解除
+        if (this.selectedClip.childrenIds) {
+            this.selectedClip.childrenIds.forEach(childId => {
+                const child = this.clips.find(c => c.id === childId);
+                if (child) {
+                    child.parentId = null;
+                }
+            });
+            this.selectedClip.childrenIds = [];
+        }
+        
+        this.updatePropertiesPanel();
+        this.updatePreview();
+        this.drawTimeline();
+        this.saveHistory();
+    }
+    
+    // clipBがclipAの子孫かどうかを判定
+    isDescendantOf(clipAId, clipBId) {
+        const clipB = this.clips.find(c => c.id === clipBId);
+        if (!clipB || !clipB.childrenIds) return false;
+        
+        for (const childId of clipB.childrenIds) {
+            if (childId === clipAId) return true;
+            if (this.isDescendantOf(clipAId, childId)) return true;
+        }
+        
+        return false;
+    }
+    
+    // 親のトランスフォームを取得（再帰的に計算）
+    getParentTransform(clip, localTime) {
+        if (!clip.parentId) {
+            return {
+                x: 0,
+                y: 0,
+                rotation: 0,
+                scale: 1
+            };
+        }
+        
+        const parent = this.clips.find(c => c.id === clip.parentId);
+        if (!parent) {
+            return {
+                x: 0,
+                y: 0,
+                rotation: 0,
+                scale: 1
+            };
+        }
+        
+        // 親のローカル時間を計算
+        const parentLocalTime = localTime + clip.startTime - parent.startTime;
+        
+        // 親のトランスフォームを取得
+        const parentX = this.getKeyframeValue(parent, 'x', parentLocalTime);
+        const parentY = this.getKeyframeValue(parent, 'y', parentLocalTime);
+        const parentRotation = this.getKeyframeValue(parent, 'rotation', parentLocalTime);
+        const parentScale = this.getKeyframeValue(parent, 'scale', parentLocalTime);
+        
+        // 親の親のトランスフォームを再帰的に取得
+        const grandParentTransform = this.getParentTransform(parent, parentLocalTime);
+        
+        // 累積的なトランスフォームを計算
+        const radians = (grandParentTransform.rotation * Math.PI) / 180;
+        const cos = Math.cos(radians);
+        const sin = Math.sin(radians);
+        
+        return {
+            x: grandParentTransform.x + (parentX * cos - parentY * sin) * grandParentTransform.scale,
+            y: grandParentTransform.y + (parentX * sin + parentY * cos) * grandParentTransform.scale,
+            rotation: grandParentTransform.rotation + parentRotation,
+            scale: grandParentTransform.scale * parentScale
+        };
     }
     
     // トランジション更新
@@ -2937,7 +3334,8 @@ class StarlitTimelineApp {
             this.testPlayAudio(this.selectedClip);
         }
         
-        this.updatePreview(); // プレビューのみ更新
+        // デバウンス版updatePreviewを使用（8ms）
+        this.updatePreviewDebounced();
     }
     
     // 音声パラメータ調整時のテスト再生
@@ -2974,7 +3372,7 @@ class StarlitTimelineApp {
         }
         
         this.selectedClip.anchorPoint[axis] = value;
-        this.updatePreview();
+        this.updatePreviewDebounced(); // デバウンス版を使用
     }
     
     // アンカーポイント設定（確定時）
@@ -3083,6 +3481,20 @@ class StarlitTimelineApp {
             // 必ずフラグをリセット
             this.isUpdatingPreview = false;
         }
+    }
+    
+    // デバウンス付きupdatePreview（ドラッグ操作時などに使用）
+    updatePreviewDebounced() {
+        // 既存のタイマーをキャンセル
+        if (this.previewUpdateTimer) {
+            clearTimeout(this.previewUpdateTimer);
+        }
+        
+        // 新しいタイマーをセット
+        this.previewUpdateTimer = setTimeout(() => {
+            this.updatePreview();
+            this.previewUpdateTimer = null;
+        }, this.previewUpdateDelay);
     }
     
     // パペットピンを画面上に描画
@@ -3235,6 +3647,20 @@ class StarlitTimelineApp {
         const opacity = this.getKeyframeValue(clip, 'opacity', localTime);
         const scale = this.getKeyframeValue(clip, 'scale', localTime);
         
+        // 親のトランスフォームを取得
+        const parentTransform = this.getParentTransform(clip, localTime);
+        
+        // 親のトランスフォームを適用した最終的なトランスフォームを計算
+        const finalRotation = parentTransform.rotation + rotation;
+        const finalScale = parentTransform.scale * scale;
+        
+        // 親の回転を考慮して子の位置を計算
+        const radians = (parentTransform.rotation * Math.PI) / 180;
+        const cos = Math.cos(radians);
+        const sin = Math.sin(radians);
+        const finalX = parentTransform.x + (x * cos - y * sin) * parentTransform.scale;
+        const finalY = parentTransform.y + (x * sin + y * cos) * parentTransform.scale;
+        
         const ctx = this.previewCtx;
         
         // 音声クリップの場合は音声のみ再生
@@ -3243,24 +3669,38 @@ class StarlitTimelineApp {
             return;
         }
         
-        ctx.save();
+        // クリッピングが有効な場合は一時キャンバスに描画
+        let targetCtx = ctx;
+        let tempCanvas = null;
+        
+        if (clip.clipSource) {
+            tempCanvas = document.createElement('canvas');
+            tempCanvas.width = this.previewCanvas.width;
+            tempCanvas.height = this.previewCanvas.height;
+            targetCtx = tempCanvas.getContext('2d');
+        }
+        
+        targetCtx.save();
         
         // ブレンドモードを適用（音声クリップ以外）
         if (clip.blendMode && clip.blendMode !== 'normal') {
-            ctx.globalCompositeOperation = clip.blendMode;
+            targetCtx.globalCompositeOperation = clip.blendMode;
         }
-        
-        // トランジション効果を適用
-        this.applyTransition(clip, localTime, transitionProgress);
         
         // アンカーポイントを取得（デフォルトは中心）
         const anchor = clip.anchorPoint || { x: 0.5, y: 0.5 };
         
-        // 中心を基準に変形（キャンバスの実際のサイズを使用）
-        ctx.translate(this.previewCanvas.width / 2 + x, this.previewCanvas.height / 2 + y);
-        ctx.rotate(rotation * Math.PI / 180);
-        ctx.scale(scale, scale);
-        ctx.globalAlpha = opacity * transitionProgress;
+        // 中心を基準に変形（キャンバスの実際のサイズを使用、親のトランスフォームを適用）
+        targetCtx.translate(this.previewCanvas.width / 2 + finalX, this.previewCanvas.height / 2 + finalY);
+        targetCtx.rotate(finalRotation * Math.PI / 180);
+        targetCtx.scale(finalScale, finalScale);
+        targetCtx.globalAlpha = opacity * transitionProgress;
+        
+        // 一時的にthis.previewCtxを切り替え（drawImage等が使用するため）
+        const originalCtx = this.previewCtx;
+        if (tempCanvas) {
+            this.previewCtx = targetCtx;
+        }
         
         // 素材を描画
         if (clip.asset.type === 'image') {
@@ -3275,7 +3715,18 @@ class StarlitTimelineApp {
             this.drawGeneratedObject(clip);
         }
         
-        ctx.restore();
+        // previewCtxを元に戻す
+        if (tempCanvas) {
+            this.previewCtx = originalCtx;
+        }
+        
+        targetCtx.restore();
+        
+        // クリッピングを適用（一時キャンバスにマスク適用後、メインキャンバスに描画）
+        if (clip.clipSource && tempCanvas) {
+            this.clippingManager.applyClipping(targetCtx, clip, this.currentTime);
+            ctx.drawImage(tempCanvas, 0, 0);
+        }
     }
     
     // 連番アニメーションを描画
@@ -4720,7 +5171,27 @@ class StarlitTimelineApp {
     deleteSelected() {
         if (!this.selectedClip) return;
         
-        const index = this.clips.indexOf(this.selectedClip);
+        const clipToDelete = this.selectedClip;
+        
+        // 親から子を削除
+        if (clipToDelete.parentId) {
+            const parent = this.clips.find(c => c.id === clipToDelete.parentId);
+            if (parent && parent.childrenIds) {
+                parent.childrenIds = parent.childrenIds.filter(id => id !== clipToDelete.id);
+            }
+        }
+        
+        // 子の親参照を削除
+        if (clipToDelete.childrenIds) {
+            clipToDelete.childrenIds.forEach(childId => {
+                const child = this.clips.find(c => c.id === childId);
+                if (child) {
+                    child.parentId = null;
+                }
+            });
+        }
+        
+        const index = this.clips.indexOf(clipToDelete);
         if (index !== -1) {
             this.clips.splice(index, 1);
             this.selectedClip = null;
@@ -5009,6 +5480,8 @@ class StarlitTimelineApp {
             },
             // ディフュージョンキーフレームはプロジェクトに保存
             diffusionKeyframes: this.effects.diffusion.keyframes,
+            // トラック名を保存
+            trackNames: this.trackNames,
             settings: {
                 fps: this.fps,
                 duration: this.duration,
@@ -5106,6 +5579,12 @@ class StarlitTimelineApp {
                 if (project.diffusionKeyframes) {
                     this.effects.diffusion.keyframes = project.diffusionKeyframes;
                     this.updateDiffusionKeyframeList();
+                }
+                
+                // トラック名を復元
+                if (project.trackNames && Array.isArray(project.trackNames)) {
+                    this.trackNames = project.trackNames;
+                    this.updateTrackPanel();
                 }
                 
                 // UIを更新
@@ -6028,13 +6507,16 @@ class StarlitTimelineApp {
             this.previewCanvas.style.cursor = 'grabbing';
             
             const localTime = this.currentTime - this.selectedClip.startTime;
+            const parentTransform = this.getParentTransform(this.selectedClip, localTime);
+            
             this.initialTransform = {
                 x: this.getKeyframeValue(this.selectedClip, 'x', localTime),
                 y: this.getKeyframeValue(this.selectedClip, 'y', localTime),
                 rotation: this.getKeyframeValue(this.selectedClip, 'rotation', localTime),
                 scale: this.getKeyframeValue(this.selectedClip, 'scale', localTime),
                 centerX: this.boundingBoxCache.centerX,
-                centerY: this.boundingBoxCache.centerY
+                centerY: this.boundingBoxCache.centerY,
+                parentTransform: parentTransform
             };
             e.preventDefault();
             return;
@@ -6055,6 +6537,8 @@ class StarlitTimelineApp {
                 this.activeHandle = handle;
                 
                 const localTime = this.currentTime - this.selectedClip.startTime;
+                const parentTransform = this.getParentTransform(this.selectedClip, localTime);
+                
                 this.initialTransform = {
                     x: this.getKeyframeValue(this.selectedClip, 'x', localTime),
                     y: this.getKeyframeValue(this.selectedClip, 'y', localTime),
@@ -6063,7 +6547,8 @@ class StarlitTimelineApp {
                     width: this.boundingBoxCache.scaledWidth,
                     height: this.boundingBoxCache.scaledHeight,
                     centerX: this.boundingBoxCache.centerX,
-                    centerY: this.boundingBoxCache.centerY
+                    centerY: this.boundingBoxCache.centerY,
+                    parentTransform: parentTransform
                 };
                 e.preventDefault();
                 return;
@@ -6086,11 +6571,14 @@ class StarlitTimelineApp {
             this.previewDragMode = 'move';
             
             const localTime = this.currentTime - this.selectedClip.startTime;
+            const parentTransform = this.getParentTransform(this.selectedClip, localTime);
+            
             this.initialTransform = {
                 x: this.getKeyframeValue(this.selectedClip, 'x', localTime),
                 y: this.getKeyframeValue(this.selectedClip, 'y', localTime),
                 rotation: this.getKeyframeValue(this.selectedClip, 'rotation', localTime),
-                scale: this.getKeyframeValue(this.selectedClip, 'scale', localTime)
+                scale: this.getKeyframeValue(this.selectedClip, 'scale', localTime),
+                parentTransform: parentTransform  // 親のトランスフォームを保存
             };
             // console.log('isPreviewDragging set to:', this.isPreviewDragging);
             // console.log('previewDragMode:', this.previewDragMode);
@@ -6166,7 +6654,7 @@ class StarlitTimelineApp {
                     pin.keyframes.sort((a, b) => a.time - b.time);
                 }
                 
-                this.updatePreview();
+                this.updatePreviewDebounced(); // デバウンス版を使用
                 this.updatePuppetUI();
             }
             
@@ -6205,8 +6693,23 @@ class StarlitTimelineApp {
         
         if (this.previewDragMode === 'move') {
             // 位置移動
-            const newX = this.initialTransform.x + dx;
-            const newY = this.initialTransform.y + dy;
+            // スクリーン座標の差分を取得
+            const screenDx = mouseX - this.previewDragStart.x;
+            const screenDy = mouseY - this.previewDragStart.y;
+            
+            // 親の回転を逆適用してローカル座標の差分に変換
+            const parentRotation = this.initialTransform.parentTransform.rotation;
+            const parentScale = this.initialTransform.parentTransform.scale;
+            const radians = -(parentRotation * Math.PI / 180);  // 逆回転
+            const cos = Math.cos(radians);
+            const sin = Math.sin(radians);
+            
+            // 親のスケールも考慮
+            const localDx = (screenDx * cos - screenDy * sin) / parentScale;
+            const localDy = (screenDx * sin + screenDy * cos) / parentScale;
+            
+            const newX = this.initialTransform.x + localDx;
+            const newY = this.initialTransform.y + localDy;
             // console.log('Moving to:', newX, newY);
             this.setKeyframeValueLive('x', newX);
             this.setKeyframeValueLive('y', newY);
